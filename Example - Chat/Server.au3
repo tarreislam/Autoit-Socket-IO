@@ -16,7 +16,7 @@ If @error Then
 EndIf
 
 ConsoleWrite("Listening on port 1337" & @CRLF)
-   
+
 ; Define our events
 _Io_on("connection", ClientConnected)
 _Io_on("message", Message)

@@ -51,7 +51,6 @@ _Io_Emit($_socket, "join", $username)
 ; Request the userlist
 _Io_Emit($_socket, "request", "userlist")
 
-
 ; Start the main loop
 While _Io_Loop($_socket)
 WEnd

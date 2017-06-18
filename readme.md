@@ -1,6 +1,6 @@
-# SocketIo for AutoIt
+# AutoIt-SocketIo
 
-Yep yep, this is pretty much an attempt to port the existing project [https://socket.io/](https://socket.io/) to AutoIt's Codebase. So i will not go in to so much detail.
+Yep yep, this is pretty much an attempt to port the existing project's concept [https://socket.io/](https://socket.io/) to AutoIt's Codebase. So i will not go in to so much detail.
 
  
 * This is how the communication is done http://i.imgur.com/0mMfsBD.png
@@ -60,7 +60,12 @@ Yep yep, this is pretty much an attempt to port the existing project [https://so
 #### Server and Client methods
 * `_Io_getVer()`
 
-Returns the current version
+> Returns the current version
+
+* `_Io_On(Const $sEventName, Const $fCallback)`
+
+> Binds an event.
+> Does not return anything
 
 * `_Io_Emit(ByRef $socket, $sEventName, $p1, $p2, ...$p10)`
 

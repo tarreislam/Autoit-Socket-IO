@@ -17,8 +17,7 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 * Every Broadcast/Emit is limited to a maximum of 16 parameters
 * Every Callback Function has to have the same number of parameters as the Broadcasted/Emited event
 * It is not possible to Broadcast/Emit objects
-* Only 1D-arrays are allowed to be Broadcasted/Emitted (**This will probably not? maybe? why?**)
-* Rooms and namespaces are not supported yet (**This will probably be supported soon**)
+* Only 1D-arrays are allowed to be Broadcasted/Emitted (**2D arrays will probably never be supported**)
 
 
 ### Changelog

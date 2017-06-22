@@ -16,16 +16,28 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 ### Limitations / Drawbacks
 * Every Broadcast/Emit is limited to a maximum of 16 parameters
 * Every Callback Function has to have the same number of parameters as the Broadcasted/Emited event
-* It is not possible to Broadcast/Emit an array as a parameter (**This will probably be supported soon**)
+* It is not possible to Broadcast/Emit objects
+* Only 1D-arrays are allowed to be Broadcasted/Emitted (**This will probably not? maybe? why?**)
 * Rooms and namespaces are not supported yet (**This will probably be supported soon**)
 
 
 ### Changelog
-* **Version 1.0.0** (This update **DOES NOT** break scripts)
+
+**Version 1.1.0** (This update **DOES NOT** break scripts)
+ * Fixed bug when Emitting / Broadcasting without any parameters causing a $fCallback crash
+ * Optimized Package-handling once again.
+ * Added 1D-Array support (Endless nestning).
+ * Added Subscriptions (See `_Io_Subscribe` `_Io_Unsubscribe` and `_Io_BroadcastToRoom`).
+ * Added new example for subscriptions (Be sure to use different room names when joining with clients)
+ * Added Unit testing (See `Tests\Runner.au3` and `Tests\Tests.au3`, to run tests you need a udf found here: [https://github.com/tarreislam/Autoit-Unit-Tester](https://github.com/tarreislam/Autoit-Unit-Tester))
+
+**Version 1.0.0**
+ * (This update **DOES NOT** break scripts)
  * Added data encryption (Using Autoit's UDF Crypt.au3) See more at `_Io_EnableEncryption`
  * Added new method `_Io_Disconnect` which can be used with both servers and clients
  * Improved package-handling to increase performance
  * Increased the limit of Broadcasted/Emit parameters from 10 to 16
+
 
 ## Api methods
 
@@ -34,28 +46,42 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 
 > Returns a TCP socket
 
-* `_Io_Broadcast(ByRef $socket, $sEventName, $p1, $p2, ...$p10)`
+* `_Io_Subscribe(ByRef $socket, $sRoomName)`
+
+> Subscribes socket to a room. To emit to these subscriptions see `_Io_BroadcastToRoom`
+
+* `_Io_Unsubscribe(ByRef $socket, $sRoomName = null)`
+
+> Unsubscribes a socket from a room. If $sRoomName is null, every subscription will expire
+
+* `_Io_Broadcast(ByRef $socket, $sEventName, $p1, $p2, ...$p16)`
 
 > Emits an event to all connected sockets besides $socket
 > Does not return anything
 
-* `_Io_BroadcastToAll(ByRef $socket, $sEventName, $p1, $p2, ...$p10)`
+* `_Io_BroadcastToAll(ByRef $socket, $sEventName, $p1, $p2, ...$p16)`
 
 > Emits an event to all connected sockets
 > Does not return anything
 
+* `_Io_BroadcastToRoom(ByRef $socket, $sDesiredRoomName, $sEventName, $p1, $p2, ...$p16)`
+
+> Emits an event to all connected sockets in the given room name. See more at `_Io_Subscribe`
+> Does not return anything
+
+
 * `_Io_socketGetProperty(ByRef $socket, $sProp = Default)`
 
 > Retrieves information about the socket. Default = Array of all properties.
-> Available properties: "ip", "date", "room"
+> Available properties: "ip", "date".
 
 * `_Io_getSocketsCount()`
 
-> Returns the total amount of sockets regardles of state
+> Returns the total amount of sockets regardles of state.
 
 * `_Io_getDeadSocketCount()`
 
-> Returns the total amount of sockets regardles of state
+> Returns the total amount of sockets regardles of state.
 
 #### Client methods
 * `_Io_Connect($iAddress, $iPort, $bAutoReconnect = False)`
@@ -77,7 +103,7 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 > Binds an event.
 > Does not return anything
 
-* `_Io_Emit(ByRef $socket, $sEventName, $p1, $p2, ...$p10)`
+* `_Io_Emit(ByRef $socket, $sEventName, $p1, $p2, ...$p16)`
 
 > Emits an event to the given socket.
 > Does not return anything

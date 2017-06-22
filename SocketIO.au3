@@ -20,10 +20,11 @@
 	SOFTWARE.
 #ce
 #include-once
-#include <crypt.au3>
+#include <Crypt.au3>
+#AutoIt3Wrapper_Au3Check_Parameters=-q -d -w 1 -w 2 -w 3 -w- 4 -w 5 -w 6 -w 7
 Global Const $__c_ver = "1.0.0"
 Global Enum $__e_io_SERVER, $__e_io_CLIENT
-Global $__g_io_isActive = Null, $__g_io_vCryptKey = Null, $__g_io_vCryptAlgId = Null, $__g_io_sockets[1] = [0], $__g_io_extended_sockets[1] = [0], $__g_io_whoami, $__g_io_max_dead_sockets_count = 0, $__g_io_events[1] = [0], $__g_io_mySocket, $__g_io_dead_sockets_count = 0, $__g_io_conn_ip, $__g_io_conn_port, $__g_io_AutoReconnect = False, $__g_io_TransportCooldown = Null
+Global $__g_io_isActive = Null, $__g_io_vCryptKey = Null, $__g_io_vCryptAlgId = Null, $__g_io_sockets[1] = [0], $__g_io_extended_sockets[1] = [0], $__g_io_socket_rooms[1] = [0], $__g_io_whoami, $__g_io_max_dead_sockets_count = 0, $__g_io_events[1] = [0], $__g_io_mySocket, $__g_io_dead_sockets_count = 0, $__g_io_conn_ip, $__g_io_conn_port, $__g_io_AutoReconnect = False, $__g_io_TransportCooldown = Null
 
 
 ; #FUNCTION# ====================================================================================================================
@@ -155,6 +156,49 @@ Func _Io_Reconnect(ByRef $socket)
 EndFunc   ;==>_Io_Reconnect
 
 ; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_Subscribe
+; Description ...:
+; Syntax ........: _Io_Subscribe(Byref $socket, $sRoomName)
+; Parameters ....: $socket              - [in/out] a string value.
+;                  $sRoomName           - a string value.
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_Subscribe(ByRef $socket, $sRoomName)
+	__Io_Push2x($__g_io_socket_rooms, $socket, $sRoomName)
+EndFunc
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_Unsubscribe
+; Description ...:
+; Syntax ........: _Io_Unsubscribe(Byref $socket, $sRoomName)
+; Parameters ....: $socket              - [in/out] a string value.
+;                  $sRoomName           - a string value.
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_Unsubscribe(ByRef $socket, $sDesiredRoomName = Null)
+
+	For $i = 1 To $__g_io_socket_rooms[0] Step + 2
+		If $__g_io_socket_rooms[$i] == $socket And ($__g_io_socket_rooms[$i + 1] == $sDesiredRoomName Or $sDesiredRoomName == Null)  Then
+			$__g_io_socket_rooms[$i] = Null
+			$__g_io_socket_rooms[$i + 1] = Null
+		EndIf
+	Next
+
+EndFunc
+
+; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Disconnect
 ; Description ...:
 ; Syntax ........: _Io_Disconnect()
@@ -205,7 +249,6 @@ EndFunc   ;==>_Io_LoopFacade
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_Loop(ByRef $socket)
-	Local Static $timer = TimerInit()
 	Local $package, $aParams = Null
 
 	Switch $__g_io_whoami
@@ -261,7 +304,6 @@ Func _Io_Loop(ByRef $socket)
 				EndIf
 			Next
 
-
 			; -------------
 			;	Handle all dead sockets
 			; -------------
@@ -269,6 +311,9 @@ Func _Io_Loop(ByRef $socket)
 			For $i = 1 To $aDeadSockets[0]
 				Local $aDeadSocket_index = $aDeadSockets[$i]
 				Local $deadSocket = $__g_io_sockets[$aDeadSocket_index]
+
+				; Unsubscribe them from everything
+				_Io_Unsubscribe($deadSocket)
 
 				; Fire event
 				__Io_FireEvent($deadSocket, $aParams, "disconnect")
@@ -284,8 +329,6 @@ Func _Io_Loop(ByRef $socket)
 			If $__g_io_dead_sockets_count >= $__g_io_max_dead_sockets_count Then
 				__Io_TidyUp()
 			EndIf
-
-
 
 		Case $__e_io_CLIENT
 			; -------------
@@ -405,7 +448,7 @@ Func _Io_Emit(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default, $p3 = De
 	; What to send
 	Local $aParams = [$p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9, $p10, $p11, $p12, $p13, $p14, $p15, $p16]
 
-	; Create binary from all data
+	; Prepare package
 	Local $package = __Io_createPackage($sEventName, $aParams, @NumParams)
 
 	; attempt to send request
@@ -446,7 +489,7 @@ Func _Io_Broadcast(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default, $p3
 	; What to send
 	Local $aParams = [$p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9, $p10, $p11, $p12, $p13, $p14, $p15, $p16]
 
-	; Prepare request
+	; Prepare package
 	Local $package = __Io_createPackage($sEventName, $aParams, @NumParams)
 
 	For $i = 1 To $__g_io_sockets[0]
@@ -487,14 +530,14 @@ EndFunc   ;==>_Io_Broadcast
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_BroadcastToAll(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default, $p3 = Default, $p4 = Default, $p5 = Default, $p6 = Default, $p7 = Default, $p8 = Default, $p9 = Default, $p10 = Default, $p11 = Default, $p12 = Default, $p13 = Default, $p14 = Default, $p15 = Default, $p16 = Default)
-
+	#forceref $socket
 	; No goof names allowed
 	If Not __Io_ValidEventName($sEventName) Then Return SetError(1, 0, Null)
 
 	; What to send
 	Local $aParams = [$p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9, $p10, $p11, $p12, $p13, $p14, $p15, $p16]
 
-	; Prepare request
+	; Prepare package
 	Local $package = __Io_createPackage($sEventName, $aParams, @NumParams)
 
 	For $i = 1 To $__g_io_sockets[0]
@@ -509,6 +552,54 @@ Func _Io_BroadcastToAll(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default
 	Next
 
 EndFunc   ;==>_Io_BroadcastToAll
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_BroadcastToRoom
+; Description ...:
+; Syntax ........: _Io_BroadcastToRoom(Byref $socket, $sDesiredRoomName, $sEventName[, $p1 = Default[, $p2 = Default[, $p3 = Default[,
+;                  $p4 = Default[, $p5 = Default[, $p6 = Default[, $p7 = Default[, $p8 = Default[, $p9 = Default[,
+;                  $p10 = Default[, $p11 = Default[, $p12 = Default[, $p13 = Default[, $p14 = Default[, $p15 = Default[,
+;                  $p16 = Default]]]]]]]]]]]]]]]])
+; Parameters ....: $socket              - [in/out] a string value.
+;                  $sDesiredRoomName    - a string value.
+;                  $sEventName          - a string value.
+;                  $p1                  - [optional] a pointer value. Default is Default.
+;                  $p16                 - [optional] a pointer value. Default is Default.
+; Return values .: None
+; Author ........: Your Name
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_BroadcastToRoom(ByRef $socket, $sDesiredRoomName, $sEventName, $p1 = Default, $p2 = Default, $p3 = Default, $p4 = Default, $p5 = Default, $p6 = Default, $p7 = Default, $p8 = Default, $p9 = Default, $p10 = Default, $p11 = Default, $p12 = Default, $p13 = Default, $p14 = Default, $p15 = Default, $p16 = Default)
+	#forceref $socket
+	; No goof names allowed
+	If Not __Io_ValidEventName($sEventName) Then Return SetError(1, 0, Null)
+
+	; What to send
+	Local $aParams = [$p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9, $p10, $p11, $p12, $p13, $p14, $p15, $p16]
+
+	; Prepare package
+	Local $package = __Io_createPackage($sEventName, $aParams, @NumParams - 1); - 1 since we have more params
+
+	For $i = 1 To $__g_io_socket_rooms[0] Step + 2
+		Local $client_socket = $__g_io_socket_rooms[$i]
+
+		; Ignore dead sockets
+		If $client_socket == Null Then ContinueLoop
+
+		Local $sRoomName = $__g_io_socket_rooms[$i + 1]
+
+		; Check if this is the room we want to send to
+		If $sDesiredRoomName == $sRoomName Then
+			__Io_TransportPackage($client_socket, $package)
+		EndIf
+
+	Next
+
+EndFunc
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_socketGetProperty
@@ -539,8 +630,6 @@ Func _Io_socketGetProperty(ByRef $socket, $sProp = Default)
 					Return $aExtendedSocket[1]
 				Case "date"
 					Return $aExtendedSocket[2]
-				Case "room"
-					Return $aExtendedSocket[3]
 			EndSwitch
 
 		EndIf
@@ -571,11 +660,15 @@ Func __Io_TidyUp()
 	; Copy
 	Local $aTmp = $__g_io_sockets
 	Local $aTmpExtended = $__g_io_extended_sockets
+	Local $aTmpRooms = $__g_io_socket_rooms
+
 	; Empty
 	Global $__g_io_sockets[1] = [0]
 	Global $__g_io_extended_sockets[1] = [0]
+	Global $__g_io_socket_rooms[1] = [0]
 
-	; Rebuild
+
+	; Rebuild Sockets
 	For $i = 1 To $aTmp[0]
 		Local $socket = $aTmp[$i]
 		Local $aExtendedSocket = $aTmpExtended[$i]
@@ -585,7 +678,13 @@ Func __Io_TidyUp()
 		__Io_Push($__g_io_extended_sockets, $aExtendedSocket)
 	Next
 
-	; Reset
+	; Rebuild subscriptions
+	For $i = 1 To $aTmpRooms[0] Step + 2
+		If $aTmpRooms[$i] = Null Then ContinueLoop
+		__Io_Push2x($__g_io_socket_rooms, $aTmpRooms[$i], $aTmpRooms[$i + 1])
+	Next
+
+	; Reset deathcounter
 	$__g_io_dead_sockets_count = 0
 
 EndFunc   ;==>__Io_TidyUp
@@ -650,58 +749,60 @@ Func __Io_InvokeCallback(ByRef $socket, ByRef $r_params, Const $fCallback)
 
 EndFunc   ;==>__Io_InvokeCallback
 
-Func __Io_createPackage(ByRef $sEventName, ByRef $aData, Const $NumParams)
+Func __Io_createPackage(ByRef $sEventName, ByRef $aParams, Const $NumParams)
 
 	; Build da requezt
-	Local $request = $sEventName & @LF
+	Local $sPackage = $sEventName & ($NumParams > 2 ? @LF : "")
 
 	; append parameters
 	For $i = 3 To $NumParams
-		$request &= __Io_data2stringary($aData[$i - 3]) & ($i < $NumParams ? @LF : "")
+		$sPackage &= __Io_data2stringary($aParams[$i - 3]) & ($i < $NumParams ? @LF : "")
 	Next
 
-	; Mark the package with a box
-	$request &= "#"
+	; Strap
+	$sPackage &= "#"
 
 	; Return Package
-	Return $request
+	Return $sPackage
 EndFunc   ;==>__Io_createPackage
 
 Func __Io_getProductsFromPackage(ByRef $package)
-
 	; Clean package
 	$package = StringRegExpReplace($package, "(?s)(.*)\#$", "$1")
 
 	; Split the package(s) into wrapped products
-	Local $wrapped_products = StringSplit($package, "#")
+	Local $aWrapped_products = StringSplit($package, "#")
 
-	Local $products[1] = [0]
+	Local Const $nWrapped_productSize = $aWrapped_products[0]
 
-	For $i = 1 To $wrapped_products[0]
-		Local $wrapped_product = $wrapped_products[$i]
+	Local $aProducts[$nWrapped_productSize + 1] = [0]
+	$aProducts[0] = $nWrapped_productSize
+
+	For $i = 1 To $nWrapped_productSize
+		Local $sWrapped_product = $aWrapped_products[$i]
 
 		; Split the products into parts
-		Local $wrapped_parts = StringSplit($wrapped_product, @LF)
+		Local $aWrapped_parts = StringSplit($sWrapped_product, @LF)
 
-		Local $wrapped_size = $wrapped_parts[0];
+		Local $cnWrapped_size = $aWrapped_parts[0];
 
-		Local $sEventName = $wrapped_parts[1]
+		Local $sEventName = $aWrapped_parts[1]
 
 		; Translate params
-		Local $aParams[$wrapped_size + 1]
-		$aParams[0] = $wrapped_size - 1
+		Local $aParams[$cnWrapped_size]
+		$aParams[0] = $cnWrapped_size - 1
 
-		For $y = 2 To $wrapped_size
-			$aParams[$y - 1] = __Io_stringary2data($wrapped_parts[$y])
+		For $y = 2 To $cnWrapped_size
+			$aParams[$y - 1] = __Io_stringary2data($aWrapped_parts[$y])
 		Next
 
 		; Create finished product
-		Local $product = [$sEventName, $aParams]
-		__Io_Push($products, $product)
+		Local $aProduct = [$sEventName, $aParams]
+		$aProducts[$i] = $aProduct
 	Next
 
 
-	Return $products
+	Return $aProducts
 
 EndFunc   ;==>__Io_getProductsFromPackage
 
@@ -720,35 +821,67 @@ Func __Io_handlePackage(ByRef $socket, ByRef $package)
 
 EndFunc   ;==>__Io_handlePackage
 
-Func __Io_data2stringary($data)
-	Local $VarGetType = VarGetType($data)
+Func __Io_data2stringary($sData, $bArrLoop = False)
+	Local $VarGetType = VarGetType($sData)
 
 	; Prepare data (If needed
 	Switch $VarGetType
 		Case 'String'
-			$data = StringToBinary($data) ;
+			$sData = StringToBinary($sData) ;
 		Case 'Bool'
-			$VarGetType = $data ? 'Bool:true' : 'Bool:false'
+			$VarGetType = $sData ? 'Bool:true' : 'Bool:false'
 		Case 'Array'
-			;$data = __Io_Implode($data)
+			Local Const $nSize = UBound($sData)
+			Local $sRet = ""
+
+			For $i = 0 To $nSize - 1
+				$sRet &= StringToBinary(__Io_data2stringary($sData[$i], True)) & ($i < $nSize - 1 ? "|" : "")
+			Next
+
+			If $bArrLoop Then
+				Return StringToBinary($sRet)
+			Else
+				$sData = BinaryToString($sRet)
+			EndIf
 	EndSwitch
 
-	Return (StringFormat("%s|%s", $VarGetType, $data))
+	Return StringFormat("%s|%s", $VarGetType, $sData)
 EndFunc   ;==>__Io_data2stringary
 
-Func __Io_stringary2data($data)
-	;$data = BinaryToString($data);
-	Local $d = StringRegExp($data, "([^|]+)\|(.*)", 1)
+Func __Io_stringary2data($sDataInput, $bArrLoop = False)
 
-	If Not IsArray($d) Then Return SetError(1, 0, 0xDEADB33F)
+	; Parse nested arrays
+	if StringRegExp($sDataInput, "^0x.*") And $bArrLoop Then
 
-	Switch $d[0]
+		Local $aNestedArr = StringSplit(BinaryToString($sDataInput), "|", 2)
+		Local Const $nSize = UBound($aNestedArr) - 1
+
+		For $i = 0 To $nSize
+			$aNestedArr[$i] = __Io_stringary2data(BinaryToString($aNestedArr[$i]), True)
+		Next
+
+		Return $aNestedArr
+	EndIf
+
+	Local $aDataInput = StringRegExp($sDataInput, "([^|]+)\|(.*)", 1)
+	If @error Then Return SetError(1, 0, Null)
+
+	Local Const $sType = $aDataInput[0]
+	Local Const $uData = $aDataInput[1]
+
+	Switch $sType
 		Case "Int32"
-			Return Number($d[1])
+			Return Number($uData)
+		Case "Int64"
+			Return  Number($uData)
 		Case "Ptr"
-			Return Ptr($d[1])
+			Return Ptr($uData)
+		Case "Binary"
+			Return Binary($uData)
 		Case "Float"
-			Return Number($d[1])
+			Return Number($uData)
+		Case "Double"
+			Return Number($uData)
 		Case "Bool:true"
 			Return True
 		Case "Bool:false"
@@ -756,9 +889,18 @@ Func __Io_stringary2data($data)
 		Case "Keyword"
 			Return Null
 		Case "Array"
-			Return "Arrays are not supported yet" ;__Io_Explode($d[1])
-		Case Else ; String
-			Return BinaryToString($d[1]) ;
+			Local $aArrayChildren = StringSplit($uData, "|", 2)
+			Local Const $cnArrayChildrenSize = UBound($aArrayChildren) - 1
+
+			For $i = 0 To $cnArrayChildrenSize
+				$aArrayChildren[$i] = __Io_stringary2data(BinaryToString($aArrayChildren[$i]), True)
+			Next
+
+			Return $aArrayChildren
+		Case "String"
+			Return BinaryToString($uData)
+		Case Else
+			Return "Cannot parse type: " & $sType
 	EndSwitch
 
 EndFunc   ;==>__Io_stringary2data
@@ -772,6 +914,7 @@ Func __Io_TransportPackage(ByRef $socket, ByRef $package)
 	Else
 		$final_package = StringToBinary($package)
 	EndIf
+
 
 	TCPSend($socket, $final_package)
 EndFunc   ;==>__Io_TransportPackage
@@ -789,8 +932,8 @@ Func __Io_RecvPackage(ByRef $socket)
 	Return BinaryToString($package)
 EndFunc   ;==>__Io_RecvPackage
 
-Func __Io_createExtendedSocket(ByRef $socket) ;Actual socket, ip address, date, room
-	Local $aExtendedSocket = [$socket, __Io_SocketToIP($socket), StringFormat("%s-%s-%s %s:%s:%s", @YEAR, @MON, @MDAY, @HOUR, @MIN, @SEC), Null]
+Func __Io_createExtendedSocket(ByRef $socket) ;Actual socket, ip address, date
+	Local $aExtendedSocket = [$socket, __Io_SocketToIP($socket), StringFormat("%s-%s-%s %s:%s:%s", @YEAR, @MON, @MDAY, @HOUR, @MIN, @SEC)]
 	Return $aExtendedSocket
 EndFunc   ;==>__Io_createExtendedSocket
 
@@ -816,12 +959,24 @@ Func __Io_Shutdown()
 EndFunc   ;==>__Io_Shutdown
 
 Func __Io_Push(ByRef $a, $v)
-
 	ReDim $a[$a[0] + 2]
 	$a[$a[0] + 1] = $v
 	$a[0] += 1
 	Return $a[0]
 EndFunc   ;==>__Io_Push
+
+Func __Io_Push2x(ByRef $a, $v1, $v2)
+	ReDim $a[$a[0] + 3]
+	$a[$a[0] + 1] = $v1
+	$a[$a[0] + 2] = $v2
+	$a[0] += 2
+	Return $a[0]
+EndFunc
+
+Func __Io_HasIndex(ByRef $a, $i)
+	If $i <= $a[0] Then Return True
+	Return False
+EndFunc
 
 Func __Io_ValidEventName(ByRef $sEventName)
 	Return StringRegExp($sEventName, "^[a-zA-Z 0-9_.:-]+$")

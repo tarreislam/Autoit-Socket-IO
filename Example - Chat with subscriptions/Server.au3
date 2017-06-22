@@ -46,19 +46,22 @@ Func Disconnected(ByRef $socket)
 	_Io_BroadcastToAll($socket, "userlist", $users)
 
 	; Notify all clients our great loss
-
 	_Io_BroadcastToAll($socket, "message", "Server", $removedUserName & " has left the chat.")
 
 EndFunc
 
-Func Message(ByRef $socket, $name, $message)
+Func Message(ByRef $socket, $name, $message, $sRoom)
 	; Transit message the message
-	_Io_BroadcastToAll($socket, "message", $name, $message)
+	_Io_BroadcastToRoom($socket, $sRoom, "message", $name, $message)
 	ConsoleWrite($name & ": " & $message & @CRLF)
 EndFunc
 
-Func ClientJoined(ByRef $socket, $name)
-	ConsoleWrite("Client joined: " & $name & @CR)
+Func ClientJoined(ByRef $socket, $name, $sRoom)
+
+	; Join client to the room they requested
+	_Io_Subscribe($socket, $sRoom)
+
+	ConsoleWrite("Client joined: " & $name &  " @ " & $sRoom & @CR)
 	; Save the username in the server
 	Local $userData = [$socket, $name]
 	__io_Push($users, $userData);

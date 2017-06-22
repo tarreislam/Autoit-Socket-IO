@@ -13,12 +13,13 @@ EndIf
 #include <WindowsConstants.au3>
 
 Global $username = InputBox("Enter username", "", @UserName & Random(100,1000,1))
+Global $sRoom = InputBox("Enter the room you wish to join", "", "Secret chatroom")
 
 ; Its recommended to always use Gui events to remove the programs main focus from updating the GUI
 Opt("GUIOnEventMode", 1)
 
 #Region ### START Koda GUI section ### Form=
-Global $hGUI = GUICreate("Example chat - " & $username, 492, 320, 258, 249)
+Global $hGUI = GUICreate("Example chat - " & $username & " - " & $sRoom, 492, 320, 258, 249)
 Global $hUserList = GUICtrlCreateList("", 8, 32, 121, 279)
 GUICtrlCreateLabel("Users", 8, 8, 31, 17)
 GUICtrlCreateLabel("Chat", 136, 8, 31, 17)
@@ -46,7 +47,7 @@ GUICtrlSetOnEvent($hSend, "SendMessage")
 GUISetOnEvent($GUI_EVENT_CLOSE, "_quit")
 
 ; Notify server that we are here!
-_Io_Emit($_socket, "join", $username)
+_Io_Emit($_socket, "join", $username, $sRoom)
 
 ; Request the userlist
 _Io_Emit($_socket, "request", "userlist")
@@ -90,7 +91,7 @@ EndFunc
 ; Gui functions
 Func SendMessage()
 	; Send message
-	_Io_Emit($_socket, "message", $username, GUICtrlRead($hInput))
+	_Io_Emit($_socket, "message", $username, GUICtrlRead($hInput), $sRoom)
 	; Clear input
 	GUICtrlSetData($hInput, "")
 EndFunc

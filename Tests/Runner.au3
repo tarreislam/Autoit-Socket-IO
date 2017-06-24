@@ -4,9 +4,6 @@
 #include <Tests.au3>
 #AutoIt3Wrapper_Au3Check_Parameters=-q -d -w 1 -w 2 -w 3 -w- 4 -w 5 -w 6 -w 7
 
-;TEST
-
-
 ;Cleanup
 _UT_Cleanup()
 

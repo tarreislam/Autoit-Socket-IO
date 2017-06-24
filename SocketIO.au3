@@ -22,32 +22,33 @@
 #include-once
 #include <Crypt.au3>
 #AutoIt3Wrapper_Au3Check_Parameters=-q -d -w 1 -w 2 -w 3 -w- 4 -w 5 -w 6 -w 7
-Global Const $__c_ver = "1.0.0"
+Global Const $__c_ver = "1.2.0"
 Global Enum $__e_io_SERVER, $__e_io_CLIENT
-Global $__g_io_isActive = Null, $__g_io_vCryptKey = Null, $__g_io_vCryptAlgId = Null, $__g_io_sockets[1] = [0], $__g_io_extended_sockets[1] = [0], $__g_io_socket_rooms[1] = [0], $__g_io_whoami, $__g_io_max_dead_sockets_count = 0, $__g_io_events[1] = [0], $__g_io_mySocket, $__g_io_dead_sockets_count = 0, $__g_io_conn_ip, $__g_io_conn_port, $__g_io_AutoReconnect = False, $__g_io_TransportCooldown = Null
-
+Global $__g_io_isActive = Null, $__g_io_vCryptKey = Null, $__g_io_vCryptAlgId = Null, $__g_io_sockets[1] = [0], $__g_io_extended_sockets[1] = [0], $__g_io_socket_rooms[1] = [0], $__g_io_whoami, $__g_io_max_dead_sockets_count = 0, $__g_io_events[1] = [0], $__g_io_mySocket, $__g_io_dead_sockets_count = 0, $__g_io_conn_ip, $__g_io_conn_port, $__g_io_AutoReconnect = False, $__g_io_TransportCooldown = Null, $__g_io_nPacketSize = Null
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Listen
 ; Description ...:
 ; Syntax ........: _Io_Listen($iPort[, $iAddress = @IPAddress1[, $iMaxPendingConnections = Default[,
-;                  $iMaxDeadSocketsBeforeTidy = 1000]]])
+;                  $iMaxDeadSocketsBeforeTidy = 100]]])
 ; Parameters ....: $iPort               - an integer value.
 ;                  $iAddress            - [optional] an integer value. Default is @IPAddress1.
 ;                  $iMaxPendingConnections- [optional] an integer value. Default is Default.
-;                  $iMaxDeadSocketsBeforeTidy- [optional] an integer value. Default is 1000.
+;                  $iMaxDeadSocketsBeforeTidy- [optional] an integer value. Default is 100.
 ; Return values .: None
-; Author ........: TarreTarreTarre
+; Author ........:  TarreTarreTarre
 ; Modified ......:
 ; Remarks .......:
 ; Related .......:
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_Listen($iPort, $iAddress = @IPAddress1, $iMaxPendingConnections = Default, $iMaxDeadSocketsBeforeTidy = 1000)
+Func _Io_Listen($iPort, $iAddress = @IPAddress1, $iMaxPendingConnections = Default, $iMaxDeadSocketsBeforeTidy = 100)
 	If Not __Io_Init() Then Return SetError(1, 0, Null)
 	Local $socket = TCPListen($iAddress, $iPort, $iMaxPendingConnections)
 	If @error Then Return SetError(2, 0, Null)
+	; Set default settings
+	_Io_setRecvPackageSize()
 	$__g_io_whoami = $__e_io_SERVER
 	$__g_io_mySocket = $socket
 	$__g_io_max_dead_sockets_count = $iMaxDeadSocketsBeforeTidy
@@ -70,10 +71,13 @@ EndFunc   ;==>_Io_Listen
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_Connect($iAddress, $iPort, $bAutoReconnect = False)
+Func _Io_Connect($iAddress, $iPort, $bAutoReconnect = True)
 	If Not __Io_Init() Then Return SetError(1, 0, Null)
 	Local $socket = TCPConnect($iAddress, $iPort)
 	If @error Then Return SetError(@error, 0, Null)
+
+	; Set default settings
+	_Io_setRecvPackageSize()
 	$__g_io_whoami = $__e_io_CLIENT
 	$__g_io_mySocket = $socket
 	$__g_io_conn_ip = $iAddress
@@ -138,6 +142,23 @@ Func _Io_EnableEncryption($sFileOrKey, $CryptAlgId = $CALG_AES_256)
 EndFunc   ;==>_Io_EnableEncryption
 
 ; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_setRecvPackageSize
+; Description ...:
+; Syntax ........: _Io_setRecvPackageSize([$nPackageSize = 2048])
+; Parameters ....: $nPackageSize        - [optional] a general number value. Default is 2048.
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_setRecvPackageSize($nPackageSize = 2048)
+	$__g_io_nPacketSize = $nPackageSize
+EndFunc   ;==>_Io_setRecvPackageSize
+
+; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Reconnect
 ; Description ...:
 ; Syntax ........: _Io_Reconnect(ByRef $socket)
@@ -171,7 +192,7 @@ EndFunc   ;==>_Io_Reconnect
 ; ===============================================================================================================================
 Func _Io_Subscribe(ByRef $socket, $sRoomName)
 	__Io_Push2x($__g_io_socket_rooms, $socket, $sRoomName)
-EndFunc
+EndFunc   ;==>_Io_Subscribe
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Unsubscribe
@@ -189,14 +210,14 @@ EndFunc
 ; ===============================================================================================================================
 Func _Io_Unsubscribe(ByRef $socket, $sDesiredRoomName = Null)
 
-	For $i = 1 To $__g_io_socket_rooms[0] Step + 2
-		If $__g_io_socket_rooms[$i] == $socket And ($__g_io_socket_rooms[$i + 1] == $sDesiredRoomName Or $sDesiredRoomName == Null)  Then
+	For $i = 1 To $__g_io_socket_rooms[0] Step +2
+		If $__g_io_socket_rooms[$i] == $socket And ($__g_io_socket_rooms[$i + 1] == $sDesiredRoomName Or $sDesiredRoomName == Null) Then
 			$__g_io_socket_rooms[$i] = Null
 			$__g_io_socket_rooms[$i + 1] = Null
 		EndIf
 	Next
 
-EndFunc
+EndFunc   ;==>_Io_Unsubscribe
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Disconnect
@@ -289,7 +310,7 @@ Func _Io_Loop(ByRef $socket)
 				; Check if client is offline
 				If @error Then
 					; Add socket ID to array of dead sockets
-					; After the events are fired, we gonna mark it for deletion
+
 					__Io_Push($aDeadSockets, $i)
 
 					; Incr dead count
@@ -299,7 +320,7 @@ Func _Io_Loop(ByRef $socket)
 				EndIf
 
 				; Collect all Processed data, so we can invoke them all at once instead of one by one
-				If StringLen($package) Then
+				If $package Then
 					__Io_handlePackage($client_socket, $package)
 				EndIf
 			Next
@@ -325,9 +346,8 @@ Func _Io_Loop(ByRef $socket)
 			; -------------
 			;	Determine if we need to tidy up (Remove all dead sockets)
 			; -------------
-
-			If $__g_io_dead_sockets_count >= $__g_io_max_dead_sockets_count Then
-				__Io_TidyUp()
+			If $__g_io_max_dead_sockets_count > 0 And $__g_io_dead_sockets_count >= $__g_io_max_dead_sockets_count Then
+				_Io_TidyUp()
 			EndIf
 
 		Case $__e_io_CLIENT
@@ -353,7 +373,7 @@ Func _Io_Loop(ByRef $socket)
 			;	Parse incomming data
 			; -------------
 
-			If StringLen($package) Then
+			If $package Then
 				__Io_handlePackage($socket, $package)
 			EndIf
 
@@ -582,9 +602,9 @@ Func _Io_BroadcastToRoom(ByRef $socket, $sDesiredRoomName, $sEventName, $p1 = De
 	Local $aParams = [$p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9, $p10, $p11, $p12, $p13, $p14, $p15, $p16]
 
 	; Prepare package
-	Local $package = __Io_createPackage($sEventName, $aParams, @NumParams - 1); - 1 since we have more params
+	Local $package = __Io_createPackage($sEventName, $aParams, @NumParams - 1) ; - 1 since we have more params
 
-	For $i = 1 To $__g_io_socket_rooms[0] Step + 2
+	For $i = 1 To $__g_io_socket_rooms[0] Step +2
 		Local $client_socket = $__g_io_socket_rooms[$i]
 
 		; Ignore dead sockets
@@ -599,7 +619,7 @@ Func _Io_BroadcastToRoom(ByRef $socket, $sDesiredRoomName, $sEventName, $p1 = De
 
 	Next
 
-EndFunc
+EndFunc   ;==>_Io_BroadcastToRoom
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_socketGetProperty
@@ -655,8 +675,20 @@ Func _Io_getVer()
 	Return $__c_ver
 EndFunc   ;==>_Io_getVer
 
-; ~ Internal functions
-Func __Io_TidyUp()
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_TidyUp
+; Description ...:
+; Syntax ........: _Io_TidyUp()
+; Parameters ....:
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_TidyUp()
 	; Copy
 	Local $aTmp = $__g_io_sockets
 	Local $aTmpExtended = $__g_io_extended_sockets
@@ -679,7 +711,7 @@ Func __Io_TidyUp()
 	Next
 
 	; Rebuild subscriptions
-	For $i = 1 To $aTmpRooms[0] Step + 2
+	For $i = 1 To $aTmpRooms[0] Step +2
 		If $aTmpRooms[$i] = Null Then ContinueLoop
 		__Io_Push2x($__g_io_socket_rooms, $aTmpRooms[$i], $aTmpRooms[$i + 1])
 	Next
@@ -687,8 +719,9 @@ Func __Io_TidyUp()
 	; Reset deathcounter
 	$__g_io_dead_sockets_count = 0
 
-EndFunc   ;==>__Io_TidyUp
+EndFunc   ;==>_Io_TidyUp
 
+; ~ Internal functions
 Func __Io_FireEvent(ByRef $socket, ByRef $r_params, $sEventName)
 
 	For $i = 1 To $__g_io_events[0]
@@ -751,7 +784,7 @@ EndFunc   ;==>__Io_InvokeCallback
 
 Func __Io_createPackage(ByRef $sEventName, ByRef $aParams, Const $NumParams)
 
-	; Build da requezt
+	; Build da package
 	Local $sPackage = $sEventName & ($NumParams > 2 ? @LF : "")
 
 	; append parameters
@@ -766,12 +799,12 @@ Func __Io_createPackage(ByRef $sEventName, ByRef $aParams, Const $NumParams)
 	Return $sPackage
 EndFunc   ;==>__Io_createPackage
 
-Func __Io_getProductsFromPackage(ByRef $package)
+Func __Io_getProductsFromPackage(ByRef $sPackage)
 	; Clean package
-	$package = StringRegExpReplace($package, "(?s)(.*)\#$", "$1")
+	$sPackage = StringRegExpReplace($sPackage, "(?s)(.*)\#$", "$1")
 
 	; Split the package(s) into wrapped products
-	Local $aWrapped_products = StringSplit($package, "#")
+	Local $aWrapped_products = StringSplit($sPackage, "#")
 
 	Local Const $nWrapped_productSize = $aWrapped_products[0]
 
@@ -784,7 +817,7 @@ Func __Io_getProductsFromPackage(ByRef $package)
 		; Split the products into parts
 		Local $aWrapped_parts = StringSplit($sWrapped_product, @LF)
 
-		Local $cnWrapped_size = $aWrapped_parts[0];
+		Local $cnWrapped_size = $aWrapped_parts[0] ;
 
 		Local $sEventName = $aWrapped_parts[1]
 
@@ -801,13 +834,12 @@ Func __Io_getProductsFromPackage(ByRef $package)
 		$aProducts[$i] = $aProduct
 	Next
 
-
 	Return $aProducts
 
 EndFunc   ;==>__Io_getProductsFromPackage
 
-Func __Io_handlePackage(ByRef $socket, ByRef $package)
-	Local $products = __Io_getProductsFromPackage($package) ;0 event; 1 array of params
+Func __Io_handlePackage(ByRef $socket, ByRef $sPackage)
+	Local $products = __Io_getProductsFromPackage($sPackage) ;0 event; 1 array of params
 
 	For $w = 1 To $products[0]
 		Local $product = $products[$w]
@@ -817,7 +849,6 @@ Func __Io_handlePackage(ByRef $socket, ByRef $package)
 
 		__Io_FireEvent($socket, $aParams, $sEventName)
 	Next
-
 
 EndFunc   ;==>__Io_handlePackage
 
@@ -851,7 +882,7 @@ EndFunc   ;==>__Io_data2stringary
 Func __Io_stringary2data($sDataInput, $bArrLoop = False)
 
 	; Parse nested arrays
-	if StringRegExp($sDataInput, "^0x.*") And $bArrLoop Then
+	If StringRegExp($sDataInput, "^0x.*") And $bArrLoop Then
 
 		Local $aNestedArr = StringSplit(BinaryToString($sDataInput), "|", 2)
 		Local Const $nSize = UBound($aNestedArr) - 1
@@ -873,7 +904,7 @@ Func __Io_stringary2data($sDataInput, $bArrLoop = False)
 		Case "Int32"
 			Return Number($uData)
 		Case "Int64"
-			Return  Number($uData)
+			Return Number($uData)
 		Case "Ptr"
 			Return Ptr($uData)
 		Case "Binary"
@@ -905,14 +936,14 @@ Func __Io_stringary2data($sDataInput, $bArrLoop = False)
 
 EndFunc   ;==>__Io_stringary2data
 
-Func __Io_TransportPackage(ByRef $socket, ByRef $package)
+Func __Io_TransportPackage(ByRef $socket, ByRef $sPackage)
 	Local $final_package
 
 	; Check if we should encrypt the data
 	If $__g_io_vCryptKey Then
-		$final_package = _Crypt_EncryptData($package, $__g_io_vCryptKey, $__g_io_vCryptAlgId)
+		$final_package = _Crypt_EncryptData($sPackage, $__g_io_vCryptKey, $__g_io_vCryptAlgId)
 	Else
-		$final_package = StringToBinary($package)
+		$final_package = StringToBinary($sPackage)
 	EndIf
 
 
@@ -920,11 +951,11 @@ Func __Io_TransportPackage(ByRef $socket, ByRef $package)
 EndFunc   ;==>__Io_TransportPackage
 
 Func __Io_RecvPackage(ByRef $socket)
-	Local $package = TCPRecv($socket, 2048, 1)
+	Local $package = TCPRecv($socket, $__g_io_nPacketSize, 1)
 	If @error Then Return SetError(@error, 0, "")
-	If $package == "" Then Return ""
+	If $package == "" Then Return Null
 
-	; Check if we are in ecrypt-mode
+	; Check if we want to decrypt our data
 	If $__g_io_vCryptKey Then
 		$package = _Crypt_DecryptData($package, $__g_io_vCryptKey, $__g_io_vCryptAlgId)
 	EndIf
@@ -971,12 +1002,12 @@ Func __Io_Push2x(ByRef $a, $v1, $v2)
 	$a[$a[0] + 2] = $v2
 	$a[0] += 2
 	Return $a[0]
-EndFunc
+EndFunc   ;==>__Io_Push2x
 
 Func __Io_HasIndex(ByRef $a, $i)
 	If $i <= $a[0] Then Return True
 	Return False
-EndFunc
+EndFunc   ;==>__Io_HasIndex
 
 Func __Io_ValidEventName(ByRef $sEventName)
 	Return StringRegExp($sEventName, "^[a-zA-Z 0-9_.:-]+$")

@@ -1,5 +1,5 @@
 test.au3
 *.exe
-BackUp\
-Packages\
+BackUp/
+Packages/
 todo.txt

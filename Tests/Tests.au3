@@ -84,7 +84,7 @@ Func test_fakeCallback($socket, $string)
 	_UT_Assert(_UT_IS($string, "equal", "test"))
 EndFunc
 
-Func test_public_basicClientServer()
+Func test_public_basic_ClientServer()
 	Local Const $MessageToSendFromServerToClient = "Hi again!"
 	Local $timer = TimerInit(), $timeout = False
 	; Build and compile a server and a client
@@ -118,12 +118,13 @@ Func test_public_basicClientServer()
 EndFunc
 
 
-Func test_public_basicClientServerWithEncryption()
+Func test_public_basic_ClientServer_With_Encryption()
 	Local Const $MessageToSendFromServerToClient = "Hi again!"
 	Local $timer = TimerInit(), $timeout = False
 	_UT_Cleanup()
 
 	; Create some key
+	FileDelete("key.txt")
 	FileWrite("key.txt", _Crypt_DeriveKey("My super Secret password", $CALG_AES_256))
 
 	Local $iServer = _UT_CompileAndRun("Tests_Encrypt_Server.au3", 1, $MessageToSendFromServerToClient)
@@ -146,7 +147,7 @@ EndFunc
 
 #include <Array.au3>
 
-Func test_Public_BroadcastToMultipleClients()
+Func test_Public_Broadcast_ToMultiple_Clients()
 
 	; Because this is a Broadcast and not a Broadcast TO ALL\Emit, this will cause our script only to ignore the7 first client only). So were testing
 	Local Const $cnClientsToStart = 25
@@ -181,7 +182,8 @@ Func test_Public_BroadcastToMultipleClients()
 EndFunc
 
 
-Func test_Public_BroadcastToAllClients()
+Func test_Public_Broadcast_To_All_Clients()
+
 	; This is the exact same test as above but this one uses BroadcastToAll instead of just the regular Broadcast and the error-rate has to be exactly 0
 	; Because this is a Broadcast and not a Broadcast TO ALL\Emit, this will cause our script only to ignore the7 first client only). So were testing
 	Local Const $cnClientsToStart = 25
@@ -213,4 +215,69 @@ Func test_Public_BroadcastToAllClients()
 	_UT_Assert(_UT_Is($nMaxFailures, "equal", 0), 'The broadcast should only cause exactly 0 failures, instead ' & $nMaxFailures & " were caused")
 
 	_UT_Assert(Not $timeout, 'A timeout occurred when waiting for server or client to shutdown')
+EndFunc
+
+Func test_public_BroadCast_to_subscriptions()
+
+	; Because this is a Broadcast and not a Broadcast TO ALL\Emit, this will cause our script only to ignore the7 first client only). So were testing
+	Local Const $cnClientsToStart = 4
+	Local $timer = TimerInit(), $timeout = False
+	_UT_Cleanup()
+
+	Local $iServer = _UT_CompileAndRun("Tests_Subscriptions_Server.au3")
+	Local $iClients = _UT_CompileAndRun("Tests_Subscriptions_Client.au3",  $cnClientsToStart);
+
+	While ProcessExists($iServer)
+		if TimerDiff($timer) > 10000 Then
+			$timeout = True
+			ExitLoop
+		EndIf
+	WEnd
+
+	ProcessClose($iServer)
+
+
+	Local $helloAs = 0
+	Local $helloBs = 0
+	For $i = 1 To $iClients[0]
+		Local $nPid = $iClients[$i]
+		ProcessClose($nPid)
+		Local $sData = _UT_Get($nPid)
+
+		If $sData == "Hello from Room A" Then $helloAs +=1
+		If $sData == "Hello from Room B" Then $helloBs +=1
+
+	Next
+
+	_UT_Assert(_UT_Is($helloAs, "equal", 2), 'Did not get broadcasts from Room A')
+	_UT_Assert(_UT_Is($helloBs, "equal", 2), 'Did not get broadcasts from Room B')
+
+	_UT_Assert(Not $timeout, 'A timeout occurred when waiting for server or client to shutdown')
+EndFunc
+
+
+Func test_public_TidyUp()
+	Local Const $nMax = 100
+	Local $timer = TimerInit(), $timeout = False
+	_UT_Cleanup()
+
+
+	Local $iServer = _UT_CompileAndRun("Tests_Tidyup_Server.au3", 1, $nMax); The second parameter will se the Maximum sockets
+	_UT_CompileAndRun("Tests_Subscriptions_Client.au3",  $nMax);
+
+
+	While ProcessExists($iServer)
+		if TimerDiff($timer) > 40000 Then
+			$timeout = True
+			ExitLoop
+		EndIf
+	WEnd
+
+	If $timeout Then
+		_UT_Assert(False, 'A timeout occurred when waiting for server or server to shutdown')
+	EndIf
+
+
+	_UT_Assert(_UT_Is(_UT_Get('_Io_getDeadSocketCount'), 'equal', 0, False), 'Automatic tidyup did not work correctly')
+
 EndFunc

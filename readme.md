@@ -22,6 +22,17 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 
 ### Changelog
 
+**Version 1.3.0** (This update **DOES NOT** break scripts)
+ * Got rid of unnecessary `Redim`s with sockets and subscriptions in the main loop (This increased write performence greatly)
+ * Changed `$iMaxDeadSocketsBeforeTidy` from `100` to `1000`
+ * Changed `_Io_setRecvPackageSize($nPackageSize = 2048)` to `_Io_setRecvPackageSize($nPackageSize = 4096)` because 2017.
+ * Added Tests for both subscriptions and the automatic TidyUp
+ * Added a new server method: `_Io_getMaxConnections`
+ * Added a new server method: `_Io_getMaxDeadSocketsCount`
+ * Added a fifth parameter to the `_Io_Listen` method called `$iMaxConnections` which defaults to `100000`. If the iMaxConnection + 1 user connects, they will be instantly disconnected.
+ * Added a parameter to `_Io_Disconnect` called `$socket` which defaults to `null`.  If the `iMaxConnections + 1` client connects, they will be instantly disconnected.
+
+
 **Version 1.2.0** (This update **DOES NOT** break scripts)
  * Added an option to set the packet-size of TCP-transports, see `_Io_setRecvPackageSize`
  * Got rid of unnecessary StringLen's in `_Io_loop`
@@ -50,11 +61,11 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 ## Api methods
 
 #### Server methods
-* `_Io_Listen($iPort, $iAddress = @IPAddress1, $iMaxPendingConnections = Default, $iMaxDeadSocketsBeforeTidy = 100)`
+* `_Io_Listen($iPort, $iAddress = @IPAddress1, $iMaxPendingConnections = Default, $iMaxDeadSocketsBeforeTidy = 1000, $iMaxConnections = 100000)`
 
 > Listens for incomming connections.
 > Returns a SocketID.
-> If `$iMaxDeadSocketsBeforeTidy` is set to False, you have to manually invoke `_Io_TidyUp` to get rid of dead sockets.
+> If `$iMaxDeadSocketsBeforeTidy` is set to False, you have to manually invoke `_Io_TidyUp` to get rid of dead sockets. If the `iMaxConnections + 1` client connects, they will be instantly disconnected.
 
 * `_Io_Subscribe(ByRef $socket, $sRoomName)`
 
@@ -69,6 +80,7 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 > If $sRoomName is null, every subscription will expire
 
 * `_Io_Broadcast(ByRef $socket, $sEventName, $p1, $p2, ...$p16)`
+
 
 > Emits an event to all connected sockets besides the originator.
 > Returns nothing.
@@ -94,15 +106,31 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 
 * `_Io_getDeadSocketCount()`
 
-> -.
+>
 > Returns the number of all dead sockets
-> -.
+>
 
 * `_Io_getSocketsCount()`
 
-> -.
+
+>
 > Returns the number of all sockets (Regardless of state)
-> -.
+>
+
+* `_Io_getMaxConnections()`
+
+
+>
+> Returns the maximum allowed connections.
+>
+
+
+* `_Io_getMaxDeadSocketsCount()`
+
+
+>
+> Returns the maximum allowed dead connections before `_Io_TidyUp()` is invoked.
+>
 
 
 * `_Io_TidyUp()`
@@ -127,9 +155,9 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 #### Server and Client methods
 * `_Io_getVer()`
 
-> -.
+>
 > Returns the current (semantic version)[http://semver.org/] of the UDF
-> -.
+>
 
 * `_Io_On(Const $sEventName, Const $fCallback)`
 
@@ -151,7 +179,7 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 
 * `_Io_LoopFacade()`
 
-> A substitute for the `_Io_Loop` solution
+> A substitute for the `_Io_Loop` solution.
 > Returns nothing.
 > Should only be used with AdlibRegister. If `_Io_Disconnect` is invoked, this facade will also be un-registered. This function will not work properly if more than 1 `_Io_Connect` or `_Io_Listen` exists in the same script.
 
@@ -162,17 +190,17 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 > The encryption has to be enabled on both sides for it to work.
 
 
-* `_Io_Disconnect()`
+* `_Io_Disconnect($socket = null)`
 
-> Manually disconnect the connection
+> Manually disconnect as Client or server / Disconnects a client (Only when acting as server).
 > Returns nothing.
-> This function will purge any previously set `_Io_LoopFacade` and cause `_Io_Loop` to return false.
+> This function will purge any previously set `_Io_LoopFacade` and cause `_Io_Loop` to return false. If the `$socket` parameter is set when running as a server, the id of that socket will be disconnected
 
-* `_Io_setRecvPackageSize($nPackageSize = 2048)`
+* `_Io_setRecvPackageSize($nPackageSize = 4096)`
 
 > Sets the maxlen for [TCPRecv](https://www.autoitscript.com/autoit3/docs/functions/TCPRecv.htm)
 > Returns nothing.
-> Is set default to 2048 by both the server and the client.
+> Is set default to 4096 by both the server and the client.
 
 ## Default events
 

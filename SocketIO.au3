@@ -22,19 +22,21 @@
 #include-once
 #include <Crypt.au3>
 #AutoIt3Wrapper_Au3Check_Parameters=-q -d -w 1 -w 2 -w 3 -w- 4 -w 5 -w 6 -w 7
-Global Const $__c_ver = "1.2.0"
+Global Const $__c_ver = "1.3.0"
 Global Enum $__e_io_SERVER, $__e_io_CLIENT
-Global $__g_io_isActive = Null, $__g_io_vCryptKey = Null, $__g_io_vCryptAlgId = Null, $__g_io_sockets[1] = [0], $__g_io_extended_sockets[1] = [0], $__g_io_socket_rooms[1] = [0], $__g_io_whoami, $__g_io_max_dead_sockets_count = 0, $__g_io_events[1] = [0], $__g_io_mySocket, $__g_io_dead_sockets_count = 0, $__g_io_conn_ip, $__g_io_conn_port, $__g_io_AutoReconnect = False, $__g_io_TransportCooldown = Null, $__g_io_nPacketSize = Null
+Global $__g_io_isActive = Null, $__g_io_vCryptKey = Null, $__g_io_vCryptAlgId = Null, $__g_io_sockets[1] = [0], $__g_io_extended_sockets[1] = [0], $__g_io_socket_rooms[1] = [0], $__g_io_whoami, $__g_io_max_dead_sockets_count = 0, $__g_io_events[1] = [0], $__g_io_mySocket, $__g_io_dead_sockets_count = 0, $__g_io_conn_ip, $__g_io_conn_port, $__g_io_AutoReconnect = False, $__g_io_nPacketSize = Null, $__g_io_nMaxConnections = Null
+
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Listen
 ; Description ...:
 ; Syntax ........: _Io_Listen($iPort[, $iAddress = @IPAddress1[, $iMaxPendingConnections = Default[,
-;                  $iMaxDeadSocketsBeforeTidy = 100]]])
+;                  $iMaxDeadSocketsBeforeTidy = 1000[, $iMaxConnections = 100000]]]])
 ; Parameters ....: $iPort               - an integer value.
 ;                  $iAddress            - [optional] an integer value. Default is @IPAddress1.
 ;                  $iMaxPendingConnections- [optional] an integer value. Default is Default.
-;                  $iMaxDeadSocketsBeforeTidy- [optional] an integer value. Default is 100.
+;                  $iMaxDeadSocketsBeforeTidy- [optional] an integer value. Default is 1000.
+;                  $iMaxConnections     - [optional] an integer value. Default is 100000.
 ; Return values .: None
 ; Author ........:  TarreTarreTarre
 ; Modified ......:
@@ -43,7 +45,7 @@ Global $__g_io_isActive = Null, $__g_io_vCryptKey = Null, $__g_io_vCryptAlgId = 
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_Listen($iPort, $iAddress = @IPAddress1, $iMaxPendingConnections = Default, $iMaxDeadSocketsBeforeTidy = 100)
+Func _Io_Listen($iPort, $iAddress = @IPAddress1, $iMaxPendingConnections = Default, $iMaxDeadSocketsBeforeTidy = 1000, $iMaxConnections = 100000)
 	If Not __Io_Init() Then Return SetError(1, 0, Null)
 	Local $socket = TCPListen($iAddress, $iPort, $iMaxPendingConnections)
 	If @error Then Return SetError(2, 0, Null)
@@ -52,7 +54,11 @@ Func _Io_Listen($iPort, $iAddress = @IPAddress1, $iMaxPendingConnections = Defau
 	$__g_io_whoami = $__e_io_SERVER
 	$__g_io_mySocket = $socket
 	$__g_io_max_dead_sockets_count = $iMaxDeadSocketsBeforeTidy
+	$__g_io_nMaxConnections = $iMaxConnections
 	$__g_io_isActive = True
+	Global $__g_io_sockets[$iMaxConnections + 1] = [0]
+	Global $__g_io_extended_sockets[$iMaxConnections + 1] = [0]
+	Global $__g_io_socket_rooms[$iMaxConnections + 1] = [0]
 	Return $socket
 EndFunc   ;==>_Io_Listen
 
@@ -75,7 +81,6 @@ Func _Io_Connect($iAddress, $iPort, $bAutoReconnect = True)
 	If Not __Io_Init() Then Return SetError(1, 0, Null)
 	Local $socket = TCPConnect($iAddress, $iPort)
 	If @error Then Return SetError(@error, 0, Null)
-
 	; Set default settings
 	_Io_setRecvPackageSize()
 	$__g_io_whoami = $__e_io_CLIENT
@@ -109,7 +114,8 @@ Func _Io_EnableEncryption($sFileOrKey, $CryptAlgId = $CALG_AES_256)
 			Return SetError(1, 0, Null)
 		EndIf
 	EndIf
-	; Attempt to init Crypt
+
+	; Attempt to init Cryp
 	_Crypt_Startup()
 	If @error Then
 		SetExtended(@error)
@@ -154,7 +160,7 @@ EndFunc   ;==>_Io_EnableEncryption
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_setRecvPackageSize($nPackageSize = 2048)
+Func _Io_setRecvPackageSize($nPackageSize = 4096)
 	$__g_io_nPacketSize = $nPackageSize
 EndFunc   ;==>_Io_setRecvPackageSize
 
@@ -191,7 +197,7 @@ EndFunc   ;==>_Io_Reconnect
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_Subscribe(ByRef $socket, $sRoomName)
-	__Io_Push2x($__g_io_socket_rooms, $socket, $sRoomName)
+	__Io_Push2x($__g_io_socket_rooms, $socket, $sRoomName, False)
 EndFunc   ;==>_Io_Subscribe
 
 ; #FUNCTION# ====================================================================================================================
@@ -222,9 +228,9 @@ EndFunc   ;==>_Io_Unsubscribe
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Disconnect
 ; Description ...:
-; Syntax ........: _Io_Disconnect()
-; Parameters ....:
-; Return values .: Always returns true
+; Syntax ........: _Io_Disconnect([$socket = Null])
+; Parameters ....: $socket              - [optional] a string value. Default is Null.
+; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:
 ; Remarks .......: The difference with this method of disconnecting and disconnecting by mistake, is that we cause the loops and facade to be purged, and the user will have to listen\connect again
@@ -232,7 +238,10 @@ EndFunc   ;==>_Io_Unsubscribe
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_Disconnect()
+Func _Io_Disconnect($socket = Null)
+	If $__g_io_whoami == $__e_io_SERVER And @NumParams == 1 Then
+		Return TCPCloseSocket($socket)
+	EndIf
 	$__g_io_isActive = False
 	AdlibUnRegister("_Io_LoopFacade")
 	__Io_Shutdown()
@@ -282,16 +291,23 @@ Func _Io_Loop(ByRef $socket)
 			Local $connectedSocket = TCPAccept($socket)
 
 			If $connectedSocket <> -1 Then
-				; Save the regular socket
-				__Io_Push($__g_io_sockets, $connectedSocket)
 
-				; Create an extended socket with more info, but in an separate array
-				Local $aExtendedSocket = __Io_createExtendedSocket($connectedSocket)
+			; Check if we have room for another one (Even dead sockets takes spaces, so therefore were not including $__g_io_dead_sockets_count)
+				If $__g_io_sockets[0] + 1 <= $__g_io_nMaxConnections Then
+					; Save the regular socket
+					__Io_Push($__g_io_sockets, $connectedSocket, False)
 
-				__Io_Push($__g_io_extended_sockets, $aExtendedSocket)
+					; Create an extended socket with more info, but in an separate array
+					Local $aExtendedSocket = __Io_createExtendedSocket($connectedSocket)
 
-				; Fire connection event
-				__Io_FireEvent($connectedSocket, $aParams, "connection")
+					__Io_Push($__g_io_extended_sockets, $aExtendedSocket, False)
+
+					; Fire connection event
+					__Io_FireEvent($connectedSocket, $aParams, "connection")
+				Else
+					; Close socket because were full!
+					_Io_Disconnect($connectedSocket)
+				EndIf
 			EndIf
 
 			; -------------
@@ -303,7 +319,7 @@ Func _Io_Loop(ByRef $socket)
 				Local $client_socket = $__g_io_sockets[$i]
 
 				; Ignore dead sockets
-				If $client_socket == Null Then ContinueLoop
+				If Not $client_socket > 0 Then ContinueLoop
 
 				$package = __Io_RecvPackage($client_socket)
 
@@ -402,40 +418,6 @@ Func _Io_On(Const $sEventName, Const $fCallback)
 EndFunc   ;==>_Io_On
 
 ; #FUNCTION# ====================================================================================================================
-; Name ..........: _Io_getSocketsCount
-; Description ...:
-; Syntax ........: _Io_getSocketsCount()
-; Parameters ....:
-; Return values .: None
-; Author ........: TarreTarreTarre
-; Modified ......:
-; Remarks .......:
-; Related .......:
-; Link ..........:
-; Example .......: No
-; ===============================================================================================================================
-Func _Io_getSocketsCount()
-	Return $__g_io_sockets[0]
-EndFunc   ;==>_Io_getSocketsCount
-
-; #FUNCTION# ====================================================================================================================
-; Name ..........: _Io_getDeadSocketCount
-; Description ...:
-; Syntax ........: _Io_getDeadSocketCount()
-; Parameters ....:
-; Return values .: None
-; Author ........: TarreTarreTarre
-; Modified ......:
-; Remarks .......:
-; Related .......:
-; Link ..........:
-; Example .......: No
-; ===============================================================================================================================
-Func _Io_getDeadSocketCount()
-	Return $__g_io_dead_sockets_count
-EndFunc   ;==>_Io_getDeadSocketCount
-
-; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Emit
 ; Description ...:
 ; Syntax ........: _Io_Emit(Byref $socket, $sEventName[, $p1 = Default[, $p2 = Default[, $p3 = Default[, $p4 = Default[,
@@ -516,7 +498,7 @@ Func _Io_Broadcast(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default, $p3
 		Local $client_socket = $__g_io_sockets[$i]
 
 		; Ignore dead sockets and "self"
-		If $client_socket == Null Or $socket == $client_socket Then ContinueLoop
+		If Not $client_socket > 0 Or $socket == $client_socket Then ContinueLoop
 
 		; Send da package
 		__Io_TransportPackage($client_socket, $package)
@@ -564,7 +546,7 @@ Func _Io_BroadcastToAll(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default
 		Local $client_socket = $__g_io_sockets[$i]
 
 		; Ignore dead sockets only
-		If $client_socket == Null Then ContinueLoop
+		If Not $client_socket > 0 Then ContinueLoop
 
 		; Send da package
 		__Io_TransportPackage($client_socket, $package)
@@ -608,7 +590,7 @@ Func _Io_BroadcastToRoom(ByRef $socket, $sDesiredRoomName, $sEventName, $p1 = De
 		Local $client_socket = $__g_io_socket_rooms[$i]
 
 		; Ignore dead sockets
-		If $client_socket == Null Then ContinueLoop
+		If Not $client_socket > 0 Then ContinueLoop
 
 		Local $sRoomName = $__g_io_socket_rooms[$i + 1]
 
@@ -676,6 +658,76 @@ Func _Io_getVer()
 EndFunc   ;==>_Io_getVer
 
 ; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_getSocketsCount
+; Description ...:
+; Syntax ........: _Io_getSocketsCount()
+; Parameters ....:
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_getSocketsCount()
+	Return $__g_io_sockets[0]
+EndFunc   ;==>_Io_getSocketsCount
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_getDeadSocketCount
+; Description ...:
+; Syntax ........: _Io_getDeadSocketCount()
+; Parameters ....:
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_getDeadSocketCount()
+	Return $__g_io_dead_sockets_count
+EndFunc   ;==>_Io_getDeadSocketCount
+
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_getMaxConnections
+; Description ...:
+; Syntax ........: _Io_getMaxConnections()
+; Parameters ....:
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_getMaxConnections()
+	Return $__g_io_nMaxConnections
+EndFunc
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_getMaxDeadSocketsCount
+; Description ...:
+; Syntax ........: _Io_getMaxDeadSocketsCount()
+; Parameters ....:
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_getMaxDeadSocketsCount()
+	Return $__g_io_max_dead_sockets_count
+EndFunc
+
+
+; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_TidyUp
 ; Description ...:
 ; Syntax ........: _Io_TidyUp()
@@ -694,26 +746,25 @@ Func _Io_TidyUp()
 	Local $aTmpExtended = $__g_io_extended_sockets
 	Local $aTmpRooms = $__g_io_socket_rooms
 
-	; Empty
-	Global $__g_io_sockets[1] = [0]
-	Global $__g_io_extended_sockets[1] = [0]
-	Global $__g_io_socket_rooms[1] = [0]
-
+	; Reset
+	$__g_io_sockets[0] = 0
+	$__g_io_extended_sockets[0] = 0
+	$__g_io_socket_rooms[0] = 0
 
 	; Rebuild Sockets
 	For $i = 1 To $aTmp[0]
 		Local $socket = $aTmp[$i]
 		Local $aExtendedSocket = $aTmpExtended[$i]
-		If $socket == Null Then ContinueLoop
+		If Not $socket > 0 Then ContinueLoop
 
-		__Io_Push($__g_io_sockets, $socket)
-		__Io_Push($__g_io_extended_sockets, $aExtendedSocket)
+		__Io_Push($__g_io_sockets, $socket, False)
+		__Io_Push($__g_io_extended_sockets, $aExtendedSocket, False)
 	Next
 
 	; Rebuild subscriptions
 	For $i = 1 To $aTmpRooms[0] Step +2
 		If $aTmpRooms[$i] = Null Then ContinueLoop
-		__Io_Push2x($__g_io_socket_rooms, $aTmpRooms[$i], $aTmpRooms[$i + 1])
+		__Io_Push2x($__g_io_socket_rooms, $aTmpRooms[$i], $aTmpRooms[$i + 1], False)
 	Next
 
 	; Reset deathcounter
@@ -989,25 +1040,24 @@ Func __Io_Shutdown()
 	TCPShutdown()
 EndFunc   ;==>__Io_Shutdown
 
-Func __Io_Push(ByRef $a, $v)
-	ReDim $a[$a[0] + 2]
+Func __Io_Push(ByRef $a, $v, $bRedim = True)
+	If $bRedim Then
+		ReDim $a[$a[0] + 2]
+	EndIf
 	$a[$a[0] + 1] = $v
 	$a[0] += 1
 	Return $a[0]
 EndFunc   ;==>__Io_Push
 
-Func __Io_Push2x(ByRef $a, $v1, $v2)
-	ReDim $a[$a[0] + 3]
+Func __Io_Push2x(ByRef $a, $v1, $v2, $bRedim = True)
+	If $bRedim Then
+		ReDim $a[$a[0] + 3]
+	EndIf
 	$a[$a[0] + 1] = $v1
 	$a[$a[0] + 2] = $v2
 	$a[0] += 2
 	Return $a[0]
 EndFunc   ;==>__Io_Push2x
-
-Func __Io_HasIndex(ByRef $a, $i)
-	If $i <= $a[0] Then Return True
-	Return False
-EndFunc   ;==>__Io_HasIndex
 
 Func __Io_ValidEventName(ByRef $sEventName)
 	Return StringRegExp($sEventName, "^[a-zA-Z 0-9_.:-]+$")

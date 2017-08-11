@@ -272,9 +272,9 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 > Removes all events from the script.
 > Returngs nothing.
 
-* `_Io_TransferEvents($from, $to)`
+* `_Io_TransferSocket(ByRef $from, ByRef $to)`
 
-> Moves all the events from 1 socket to another.
+> Transfer the socket id and events to a new Socket.
 > Returns nothing
 
 ## Default events

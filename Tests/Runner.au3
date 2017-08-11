@@ -4,6 +4,8 @@
 #include <Tests.au3>
 #AutoIt3Wrapper_Au3Check_Parameters=-q -d -w 1 -w 2 -w 3 -w- 4 -w 5 -w 6 -w 7
 
+
+
 ;Cleanup
 _UT_Cleanup()
 
@@ -11,6 +13,10 @@ _UT_Cleanup()
 _UT_RegisterTest("core", testVartypeTranslation)
 _UT_RegisterTest("core", testPackageHandling)
 _UT_RegisterTest("core", testFireEvents)
+_UT_RegisterTest("core", test_banning)
+_UT_RegisterTest("core", test_postAndPrescript)
+_UT_RegisterTest("core", test_misc)
+
 _UT_RegisterTest("public api", test_public_basic_ClientServer)
 _UT_RegisterTest("public api", test_public_basic_ClientServer_With_Encryption)
 _UT_RegisterTest("public api", test_Public_Broadcast_ToMultiple_Clients)
@@ -20,6 +26,7 @@ _UT_RegisterTest("public api", test_public_TidyUp)
 
 ; Start runners
 _UT_StartRunner("core", RunnerCallback)
+
 _UT_StartRunner("public api", RunnerCallback)
 
 ;Cleanup

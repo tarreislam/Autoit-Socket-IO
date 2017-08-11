@@ -22,9 +22,10 @@
 #include-once
 #include <Crypt.au3>
 #AutoIt3Wrapper_Au3Check_Parameters=-q -d -w 1 -w 2 -w 3 -w- 4 -w 5 -w 6 -w 7
-Global Const $__c_ver = "1.3.0"
+Global Const $__c_ver = "1.4.0"
 Global Enum $__e_io_SERVER, $__e_io_CLIENT
-Global $__g_io_isActive = Null, $__g_io_vCryptKey = Null, $__g_io_vCryptAlgId = Null, $__g_io_sockets[1] = [0], $__g_io_extended_sockets[1] = [0], $__g_io_socket_rooms[1] = [0], $__g_io_whoami, $__g_io_max_dead_sockets_count = 0, $__g_io_events[1] = [0], $__g_io_mySocket, $__g_io_dead_sockets_count = 0, $__g_io_conn_ip, $__g_io_conn_port, $__g_io_AutoReconnect = False, $__g_io_nPacketSize = Null, $__g_io_nMaxConnections = Null
+Global Enum $_IO_LOOP_SERVER, $_IO_LOOP_CLIENT
+Global $__g_io_isActive = Null, $__g_io_vCryptKey = Null, $__g_io_vCryptAlgId = Null, $__g_iBiggestSocketI = 0, $__g_io_sockets[1] = [0], $__g_io_aBanlist[1] = [0], $__g_io_socket_rooms[1] = [0], $__g_io_whoami, $__g_io_max_dead_sockets_count = 0, $__g_io_events[1000] = [0], $__g_io_mySocket, $__g_io_dead_sockets_count = 0, $__g_io_conn_ip, $__g_io_conn_port, $__g_io_AutoReconnect = False, $__g_io_nPacketSize = Null, $__g_io_nMaxConnections = Null, $__g_Io_fPreScript = Null, $__g_Io_fPostScript = Null
 
 
 ; #FUNCTION# ====================================================================================================================
@@ -54,11 +55,13 @@ Func _Io_Listen($iPort, $iAddress = @IPAddress1, $iMaxPendingConnections = Defau
 	$__g_io_whoami = $__e_io_SERVER
 	$__g_io_mySocket = $socket
 	$__g_io_max_dead_sockets_count = $iMaxDeadSocketsBeforeTidy
-	$__g_io_nMaxConnections = $iMaxConnections
+	$__g_io_nMaxConnections = $iMaxConnections * 3 ; * 3 because all elementz
 	$__g_io_isActive = True
-	Global $__g_io_sockets[$iMaxConnections + 1] = [0]
-	Global $__g_io_extended_sockets[$iMaxConnections + 1] = [0]
+	;Global $__g_io_events[1001] = [0]
+	Global $__g_io_sockets[($iMaxConnections * 3) + 1] = [0] ; *3 for all elements
 	Global $__g_io_socket_rooms[$iMaxConnections + 1] = [0]
+	Global $__g_io_aBanlist[(($iMaxConnections / 4) * 5) + 1] = [0] ; 25% of max connections * 5 etries +1 for sizeslot
+	__Io_Ban_LoadToMemory()
 	Return $socket
 EndFunc   ;==>_Io_Listen
 
@@ -83,6 +86,7 @@ Func _Io_Connect($iAddress, $iPort, $bAutoReconnect = True)
 	If @error Then Return SetError(@error, 0, Null)
 	; Set default settings
 	_Io_setRecvPackageSize()
+	;Global $__g_io_events[1001] = [0]
 	$__g_io_whoami = $__e_io_CLIENT
 	$__g_io_mySocket = $socket
 	$__g_io_conn_ip = $iAddress
@@ -178,7 +182,10 @@ EndFunc   ;==>_Io_setRecvPackageSize
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_Reconnect(ByRef $socket)
-	$socket = _Io_Connect($__g_io_conn_ip, $__g_io_conn_port)
+	; Create new socket
+	Local $new_socket = _Io_Connect($__g_io_conn_ip, $__g_io_conn_port)
+	; Transfer socket and events
+	_Io_TransferSocket($socket, $new_socket)
 	Return $socket
 EndFunc   ;==>_Io_Reconnect
 
@@ -197,7 +204,7 @@ EndFunc   ;==>_Io_Reconnect
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_Subscribe(ByRef $socket, $sRoomName)
-	__Io_Push2x($__g_io_socket_rooms, $socket, $sRoomName, False)
+	__Io_Push2x($__g_io_socket_rooms, $socket, $sRoomName)
 EndFunc   ;==>_Io_Subscribe
 
 ; #FUNCTION# ====================================================================================================================
@@ -238,7 +245,7 @@ EndFunc   ;==>_Io_Unsubscribe
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_Disconnect($socket = Null)
+Func _Io_Disconnect($socket = Default)
 	If $__g_io_whoami == $__e_io_SERVER And @NumParams == 1 Then
 		Return TCPCloseSocket($socket)
 	EndIf
@@ -278,10 +285,10 @@ EndFunc   ;==>_Io_LoopFacade
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_Loop(ByRef $socket)
+Func _Io_Loop(ByRef $socket, $whoAmI = $__g_io_whoami)
 	Local $package, $aParams = Null
 
-	Switch $__g_io_whoami
+	Switch $whoAmI
 		Case $__e_io_SERVER
 
 			; -------------
@@ -292,18 +299,39 @@ Func _Io_Loop(ByRef $socket)
 
 			If $connectedSocket <> -1 Then
 
-			; Check if we have room for another one (Even dead sockets takes spaces, so therefore were not including $__g_io_dead_sockets_count)
-				If $__g_io_sockets[0] + 1 <= $__g_io_nMaxConnections Then
-					; Save the regular socket
-					__Io_Push($__g_io_sockets, $connectedSocket, False)
-
-					; Create an extended socket with more info, but in an separate array
+				; Check if we have room for another one (Even dead sockets takes spaces, so therefore were not including $__g_io_dead_sockets_count)
+				If $__g_io_sockets[0] + 1 <= $__g_io_nMaxConnections Then ; $__g_io_nMaxConnections has *3 so it will not be bothered by the dim size
+					; Create an socket with more info, but in an separate array
 					Local $aExtendedSocket = __Io_createExtendedSocket($connectedSocket)
 
-					__Io_Push($__g_io_extended_sockets, $aExtendedSocket, False)
+					; Check if banned
+					Local $isBanned = _Io_IsBanned($aExtendedSocket[1])
+
+					If $isBanned > 0 Then
+
+						;get banned-data
+						Local $aBannedInfo = _Io_getBanlist($isBanned)
+
+						; Emit ban notification
+						_Io_Emit($connectedSocket, "banned", $aBannedInfo[1], $aBannedInfo[2], $aBannedInfo[3], $aBannedInfo[4])
+
+						; Close socket
+						_Io_Disconnect($connectedSocket)
+
+						; Return
+						Return $__g_io_isActive
+
+					EndIf
+
+					; This is done to exit any $__g_io_socket's loop and break when we know we are not going to find anything more
+					;If $connectedSocket > $__g_iBiggestSocketI Then $__g_iBiggestSocketI = $connectedSocket + 1
+					$__g_iBiggestSocketI += 3
+
+					; Save socket
+					__Io_Push3x($__g_io_sockets, $aExtendedSocket[0], $aExtendedSocket[1], $aExtendedSocket[2])
 
 					; Fire connection event
-					__Io_FireEvent($connectedSocket, $aParams, "connection")
+					__Io_FireEvent($connectedSocket, $aParams, "connection", $socket)
 				Else
 					; Close socket because were full!
 					_Io_Disconnect($connectedSocket)
@@ -315,7 +343,7 @@ Func _Io_Loop(ByRef $socket)
 			; -------------
 			Local $aDeadSockets[1] = [0]
 
-			For $i = 1 To $__g_io_sockets[0]
+			For $i = 1 To $__g_io_sockets[0] Step +3
 				Local $client_socket = $__g_io_sockets[$i]
 
 				; Ignore dead sockets
@@ -326,7 +354,6 @@ Func _Io_Loop(ByRef $socket)
 				; Check if client is offline
 				If @error Then
 					; Add socket ID to array of dead sockets
-
 					__Io_Push($aDeadSockets, $i)
 
 					; Incr dead count
@@ -337,8 +364,11 @@ Func _Io_Loop(ByRef $socket)
 
 				; Collect all Processed data, so we can invoke them all at once instead of one by one
 				If $package Then
-					__Io_handlePackage($client_socket, $package)
+					__Io_handlePackage($client_socket, $package, $socket)
 				EndIf
+
+				; Check if we can abort this loop
+				If $i >= $__g_iBiggestSocketI Then ExitLoop
 			Next
 
 			; -------------
@@ -349,14 +379,15 @@ Func _Io_Loop(ByRef $socket)
 				Local $aDeadSocket_index = $aDeadSockets[$i]
 				Local $deadSocket = $__g_io_sockets[$aDeadSocket_index]
 
-				; Unsubscribe them from everything
+				; Unsubscribe socket from everything
 				_Io_Unsubscribe($deadSocket)
 
 				; Fire event
-				__Io_FireEvent($deadSocket, $aParams, "disconnect")
+				__Io_FireEvent($deadSocket, $aParams, "disconnect", $socket)
 
 				; Mark socket as dead.
 				$__g_io_sockets[$aDeadSocket_index] = Null
+
 			Next
 
 			; -------------
@@ -378,8 +409,9 @@ Func _Io_Loop(ByRef $socket)
 			; -------------
 
 			If @error Then
-				__Io_FireEvent($socket, $aParams, "disconnect")
+				__Io_FireEvent($socket, $aParams, "disconnect", $socket) ; $socket two times is correct.
 
+				; Reconnect if we need to
 				If $__g_io_AutoReconnect Then
 					_Io_Reconnect($socket)
 				EndIf
@@ -390,13 +422,49 @@ Func _Io_Loop(ByRef $socket)
 			; -------------
 
 			If $package Then
-				__Io_handlePackage($socket, $package)
+				__Io_handlePackage($socket, $package, $socket) ; $socket two times is correct.
 			EndIf
 
 	EndSwitch
 
 	Return $__g_io_isActive
 EndFunc   ;==>_Io_Loop
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_setEventPreScript
+; Description ...:
+; Syntax ........: _Io_setEventPreScript(Const $fCallback)
+; Parameters ....: $fCallback           - [const] a floating point value.
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_setEventPreScript(Const $fCallback)
+	If Not IsFunc($fCallback) Then Return SetError(1, 0, Null)
+	$__g_Io_fPreScript = $fCallback
+EndFunc   ;==>_Io_setEventPreScript
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_setEventPostScript
+; Description ...:
+; Syntax ........: _Io_setEventPostScript(Const $fCallback)
+; Parameters ....: $fCallback           - [const] a floating point value.
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_setEventPostScript(Const $fCallback)
+	If Not IsFunc($fCallback) Then Return SetError(1, 0, Null)
+	$__g_Io_fPostScript = $fCallback
+EndFunc   ;==>_Io_setEventPostScript
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_On
@@ -412,9 +480,8 @@ EndFunc   ;==>_Io_Loop
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_On(Const $sEventName, Const $fCallback)
-	Local $eventData = [$sEventName, $fCallback]
-	__Io_Push($__g_io_events, $eventData)
+Func _Io_On(Const $sEventName, Const $fCallback, $socket = $__g_io_mySocket)
+	__Io_Push3x($__g_io_events, $sEventName, $fCallback, $socket)
 EndFunc   ;==>_Io_On
 
 ; #FUNCTION# ====================================================================================================================
@@ -494,7 +561,7 @@ Func _Io_Broadcast(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default, $p3
 	; Prepare package
 	Local $package = __Io_createPackage($sEventName, $aParams, @NumParams)
 
-	For $i = 1 To $__g_io_sockets[0]
+	For $i = 1 To $__g_io_sockets[0] Step +3
 		Local $client_socket = $__g_io_sockets[$i]
 
 		; Ignore dead sockets and "self"
@@ -502,6 +569,9 @@ Func _Io_Broadcast(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default, $p3
 
 		; Send da package
 		__Io_TransportPackage($client_socket, $package)
+
+		; Check if we can abort this loop
+		If $i >= $__g_iBiggestSocketI Then ExitLoop
 
 	Next
 EndFunc   ;==>_Io_Broadcast
@@ -542,7 +612,7 @@ Func _Io_BroadcastToAll(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default
 	; Prepare package
 	Local $package = __Io_createPackage($sEventName, $aParams, @NumParams)
 
-	For $i = 1 To $__g_io_sockets[0]
+	For $i = 1 To $__g_io_sockets[0] Step +3
 		Local $client_socket = $__g_io_sockets[$i]
 
 		; Ignore dead sockets only
@@ -550,6 +620,9 @@ Func _Io_BroadcastToAll(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default
 
 		; Send da package
 		__Io_TransportPackage($client_socket, $package)
+
+		; Check if we can abort this loop
+		If $i >= $__g_iBiggestSocketI Then ExitLoop
 
 	Next
 
@@ -619,22 +692,33 @@ EndFunc   ;==>_Io_BroadcastToRoom
 ; ===============================================================================================================================
 Func _Io_socketGetProperty(ByRef $socket, $sProp = Default)
 	; Get property from socket
-	For $i = 1 To $__g_io_sockets[0]
+	For $i = 1 To $__g_io_sockets[0] Step +3
+
+		If Not $__g_io_sockets[$i] > 0 Then ContinueLoop
 
 		If $__g_io_sockets[$i] == $socket Then
-			Local $aExtendedSocket = $__g_io_extended_sockets[$i]
+
 			; Return all
-			If $sProp == Default Then Return $aExtendedSocket
+			If $sProp == Default Then
+				Local $aExtendedSocket = [$__g_io_sockets[$i], $__g_io_sockets[$i + 1], $__g_io_sockets[$i + 2]]
+				Return $aExtendedSocket
+			EndIf
 
 			; Return specific
 			Switch $sProp
 				Case "ip"
-					Return $aExtendedSocket[1]
+					Return $__g_io_sockets[$i + 1]
 				Case "date"
-					Return $aExtendedSocket[2]
+					Return $__g_io_sockets[$i + 2]
+				Case Else
+					Return SetError(1, 0, Null)
 			EndSwitch
 
 		EndIf
+
+		; Check if we can abort this loop
+		If $i >= $__g_iBiggestSocketI Then ExitLoop
+
 	Next
 
 	Return SetError(1, 0, Null)
@@ -671,7 +755,7 @@ EndFunc   ;==>_Io_getVer
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_getSocketsCount()
-	Return $__g_io_sockets[0]
+	Return Int($__g_io_sockets[0] / 3)
 EndFunc   ;==>_Io_getSocketsCount
 
 ; #FUNCTION# ====================================================================================================================
@@ -693,6 +777,46 @@ EndFunc   ;==>_Io_getDeadSocketCount
 
 
 ; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_getActiveSocketCount
+; Description ...:
+; Syntax ........: _Io_getActiveSocketCount()
+; Parameters ....:
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_getActiveSocketCount()
+	Return _Io_getSocketsCount() - _Io_getDeadSocketCount()
+EndFunc   ;==>_Io_getActiveSocketCount
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_getSockets
+; Description ...:
+; Syntax ........: _Io_getSockets([$bForceUpdate = False[, $socket = $__g_io_mySocket[, $whoAmI = $__g_io_whoami]]])
+; Parameters ....: $bForceUpdate        - [optional] a boolean value. Default is False.
+;                  $socket              - [optional] a string value. Default is $__g_io_mySocket.
+;                  $whoAmI              - [optional] an unknown value. Default is $__g_io_whoami.
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_getSockets($bForceUpdate = False, $socket = $__g_io_mySocket, $whoAmI = $__g_io_whoami)
+
+	If $bForceUpdate Then _Io_Loop($socket, $whoAmI)
+
+	Return $__g_io_sockets
+
+EndFunc   ;==>_Io_getSockets
+
+; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_getMaxConnections
 ; Description ...:
 ; Syntax ........: _Io_getMaxConnections()
@@ -707,7 +831,7 @@ EndFunc   ;==>_Io_getDeadSocketCount
 ; ===============================================================================================================================
 Func _Io_getMaxConnections()
 	Return $__g_io_nMaxConnections
-EndFunc
+EndFunc   ;==>_Io_getMaxConnections
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_getMaxDeadSocketsCount
@@ -724,9 +848,181 @@ EndFunc
 ; ===============================================================================================================================
 Func _Io_getMaxDeadSocketsCount()
 	Return $__g_io_max_dead_sockets_count
-EndFunc
+EndFunc   ;==>_Io_getMaxDeadSocketsCount
 
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_getBanlist
+; Description ...:
+; Syntax ........: _Io_getBanlist([$iEntry = Default])
+; Parameters ....: $iEntry              - [optional] an integer value. Default is Default.
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_getBanlist($iEntry = Default)
+	If $iEntry == Default Then Return $__g_io_aBanlist
+	; ip, created_at, expires_at, reason, issued_by
+	Local $aRet = [$__g_io_aBanlist[$iEntry], $__g_io_aBanlist[$iEntry + 1], $__g_io_aBanlist[$iEntry + 2], $__g_io_aBanlist[$iEntry + 3], $__g_io_aBanlist[$iEntry + 4]]
+	Return $aRet
+EndFunc   ;==>_Io_getBanlist
 
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_Ban
+; Description ...:
+; Syntax ........: _Io_Ban($socketOrIp[, $nTime = 3600[, $sReason = "Banned"[, $sIssuedBy = "system"]]])
+; Parameters ....: $socketOrIp          - a string value.
+;                  $nTime               - [optional] a general number value. Default is 3600.
+;                  $sReason             - [optional] a string value. Default is "Banned".
+;                  $sIssuedBy           - [optional] a string value. Default is "system".
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_Ban($socketOrIp, $nTime = 3600, $sReason = "Banned", $sIssuedBy = "system")
+	Local Const $created_at = __Io_createTimestamp()
+	Local Const $expires_at = $created_at + $nTime
+	Local $isSocket = False, $originalSocket = Null
+
+	; fetch ip
+	If StringRegExp($socketOrIp, "^\d+$") Then
+		; Save the socket for later use
+		$originalSocket = $socketOrIp
+		$socketOrIp = _Io_socketGetProperty($socketOrIp, "ip")
+		$isSocket = True
+	EndIf
+
+	; Save to memory
+	Local $iSlot = $__g_io_aBanlist[0]
+	$__g_io_aBanlist[$iSlot + 1] = $socketOrIp
+	$__g_io_aBanlist[$iSlot + 2] = $created_at
+	$__g_io_aBanlist[$iSlot + 3] = $expires_at
+	$__g_io_aBanlist[$iSlot + 4] = $sReason
+	$__g_io_aBanlist[$iSlot + 5] = $sIssuedBy
+	$__g_io_aBanlist[0] = $iSlot + 5
+
+	; If this was a socket, we kick them out
+	If $isSocket Then
+		_Io_Disconnect($originalSocket)
+	EndIf
+
+	Return True
+
+EndFunc   ;==>_Io_Ban
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_Sanction
+; Description ...:
+; Syntax ........: _Io_Sanction($socketOrIp)
+; Parameters ....: $socketOrIp          - a string value.
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_Sanction($socketOrIp)
+	If StringRegExp($socketOrIp, "^\d+$") Then $socketOrIp = _Io_socketGetProperty($socketOrIp, "ip")
+
+	Local $isBanned = _Io_IsBanned($socketOrIp)
+
+	; Mask
+	If $isBanned > 0 Then
+		$__g_io_aBanlist[$isBanned] = ""
+		$__g_io_aBanlist[$isBanned + 1] = ""
+		$__g_io_aBanlist[$isBanned + 2] = ""
+		$__g_io_aBanlist[$isBanned + 3] = ""
+		$__g_io_aBanlist[$isBanned + 4] = ""
+		Return True
+	EndIf
+
+	Return False
+EndFunc   ;==>_Io_Sanction
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_IsBanned
+; Description ...:
+; Syntax ........: _Io_IsBanned($socketOrIp)
+; Parameters ....: $socketOrIp          - a string value.
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_IsBanned($socketOrIp)
+	If StringRegExp($socketOrIp, "^\d+$") Then $socketOrIp = _Io_socketGetProperty($socketOrIp, "ip")
+	Local Const $now = __Io_createTimestamp()
+	Local $isBanned
+
+	; Note the 1 INDex here
+	For $i = 1 To $__g_io_aBanlist[0] Step +5
+
+		; We cannot return on the first hit since the same ip can be banned multiple times.
+		If $__g_io_aBanlist[$i] == $socketOrIp Then
+			$isBanned = $now < $__g_io_aBanlist[$i + 2] ? $i : False
+			; only return if banned
+			If $isBanned > 0 Then Return $isBanned
+		EndIf
+
+	Next
+
+	Return False
+
+EndFunc   ;==>_Io_IsBanned
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_ClearEvents
+; Description ...:
+; Syntax ........: _Io_ClearEvents()
+; Parameters ....:
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_ClearEvents()
+	Global $__g_io_events[1001] = [0]
+EndFunc   ;==>_Io_ClearEvents
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_TransferSocket
+; Description ...:
+; Syntax ........: _Io_TransferSocket(Byref $from, Byref $to)
+; Parameters ....: $from                - [in/out] a floating point value.
+;                  $to                  - [in/out] a dll struct value.
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......:
+; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_TransferSocket(ByRef $from, ByRef $to)
+
+	For $i = 1 To $__g_io_events[0] Step +3
+		If $__g_io_events[$i + 2] == $from Then $__g_io_events[$i + 2] = $to
+	Next
+
+	; Transfer main socket identifier
+	$from = $to
+
+EndFunc   ;==>_Io_TransferSocket
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_TidyUp
 ; Description ...:
@@ -741,31 +1037,49 @@ EndFunc
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_TidyUp()
+
 	; Copy
-	Local $aTmp = $__g_io_sockets
-	Local $aTmpExtended = $__g_io_extended_sockets
+	Local $aTmpSocket = $__g_io_sockets
 	Local $aTmpRooms = $__g_io_socket_rooms
+	Local $aTmpBans = $__g_io_aBanlist
 
-	; Reset
+	; Reset count
 	$__g_io_sockets[0] = 0
-	$__g_io_extended_sockets[0] = 0
 	$__g_io_socket_rooms[0] = 0
+	$__g_io_aBanlist[0] = 0
+	$__g_iBiggestSocketI = 0
 
-	; Rebuild Sockets
-	For $i = 1 To $aTmp[0]
-		Local $socket = $aTmp[$i]
-		Local $aExtendedSocket = $aTmpExtended[$i]
-		If Not $socket > 0 Then ContinueLoop
+	; Rebuild sockets
+	For $i = 1 To $aTmpSocket[0] Step +3
+		If Not $aTmpSocket[$i] > 0 Then ContinueLoop
+		__Io_Push3x($__g_io_sockets, $aTmpSocket[$i], $aTmpSocket[$i + 1], $aTmpSocket[$i + 2])
 
-		__Io_Push($__g_io_sockets, $socket, False)
-		__Io_Push($__g_io_extended_sockets, $aExtendedSocket, False)
+		$__g_iBiggestSocketI += 3
 	Next
 
 	; Rebuild subscriptions
 	For $i = 1 To $aTmpRooms[0] Step +2
 		If $aTmpRooms[$i] = Null Then ContinueLoop
-		__Io_Push2x($__g_io_socket_rooms, $aTmpRooms[$i], $aTmpRooms[$i + 1], False)
+		__Io_Push2x($__g_io_socket_rooms, $aTmpRooms[$i], $aTmpRooms[$i + 1])
 	Next
+
+	; Rebuild banlist
+	Local $x = 0
+	Local Const $now = __Io_createTimestamp()
+	For $i = 1 To $aTmpBans[0] Step +5
+
+		; Keep all active bans
+		If $aTmpBans[$i + 2] > $now Then
+			$__g_io_aBanlist[$x + 1] = $aTmpBans[$i] ; IP
+			$__g_io_aBanlist[$x + 2] = $aTmpBans[$i + 1] ; Created_at
+			$__g_io_aBanlist[$x + 3] = $aTmpBans[$i + 2] ; Expires_at
+			$__g_io_aBanlist[$x + 4] = $aTmpBans[$i + 3] ; Issued_by
+			$__g_io_aBanlist[$x + 5] = $aTmpBans[$i + 4] ; reason
+			$x += 1
+		EndIf
+
+	Next
+	$__g_io_aBanlist[0] = $x
 
 	; Reset deathcounter
 	$__g_io_dead_sockets_count = 0
@@ -773,14 +1087,18 @@ Func _Io_TidyUp()
 EndFunc   ;==>_Io_TidyUp
 
 ; ~ Internal functions
-Func __Io_FireEvent(ByRef $socket, ByRef $r_params, $sEventName)
+Func __Io_FireEvent(ByRef $socket, ByRef $r_params, $sEventName, ByRef $parentSocket)
 
-	For $i = 1 To $__g_io_events[0]
-		Local $eventData = $__g_io_events[$i]
-		Local $fCallback = $eventData[1]
+	For $i = 1 To $__g_io_events[0] Step +3
 
-		If $eventData[0] == $sEventName Then
-			Return __Io_InvokeCallback($socket, $r_params, $fCallback)
+		Local $fCallback = $__g_io_events[$i + 1]
+
+		If $__g_io_events[$i] == $sEventName And $__g_io_events[$i + 2] == $parentSocket Then
+			Local $fCallbackName = FuncName($fCallback)
+			If $__g_Io_fPreScript Then $__g_Io_fPreScript($sEventName, $fCallbackName)
+			__Io_InvokeCallback($socket, $r_params, $fCallback)
+			If $__g_Io_fPostScript Then $__g_Io_fPostScript($sEventName, $fCallbackName)
+			Return True
 		EndIf
 	Next
 
@@ -889,7 +1207,7 @@ Func __Io_getProductsFromPackage(ByRef $sPackage)
 
 EndFunc   ;==>__Io_getProductsFromPackage
 
-Func __Io_handlePackage(ByRef $socket, ByRef $sPackage)
+Func __Io_handlePackage(ByRef $socket, ByRef $sPackage, ByRef $parentSocket)
 	Local $products = __Io_getProductsFromPackage($sPackage) ;0 event; 1 array of params
 
 	For $w = 1 To $products[0]
@@ -898,7 +1216,7 @@ Func __Io_handlePackage(ByRef $socket, ByRef $sPackage)
 		Local $sEventName = $product[0]
 		Local $aParams = $product[1]
 
-		__Io_FireEvent($socket, $aParams, $sEventName)
+		__Io_FireEvent($socket, $aParams, $sEventName, $parentSocket)
 	Next
 
 EndFunc   ;==>__Io_handlePackage
@@ -1019,8 +1337,61 @@ Func __Io_createExtendedSocket(ByRef $socket) ;Actual socket, ip address, date
 	Return $aExtendedSocket
 EndFunc   ;==>__Io_createExtendedSocket
 
-Func __Io_SocketToIP(ByRef $socket) ;ty javiwhite
+Func __Io_Ban_LoadToMemory($sBanlistFile = @ScriptName & ".banlist.ini")
+	If Not FileExists($sBanlistFile) Then Return False
+	Local Const $now = __Io_createTimestamp()
 
+	Local $aSectionNames = IniReadSectionNames($sBanlistFile)
+	If @error Then Return SetError(@error)
+	Local $x = 0
+
+	For $i = 1 To $aSectionNames[0]
+		Local $aSection = IniReadSection($sBanlistFile, $aSectionNames[$i])
+
+		; Ignore if ban if expired
+		If $now > $aSection[3][1] Then ContinueLoop
+
+		$__g_io_aBanlist[$x + 1] = $aSection[1][1] ; IP
+		$__g_io_aBanlist[$x + 2] = $aSection[2][1] ; created_at
+		$__g_io_aBanlist[$x + 3] = $aSection[3][1] ; expires_at
+		$__g_io_aBanlist[$x + 4] = $aSection[4][1] ; issued_by
+		$__g_io_aBanlist[$x + 5] = $aSection[5][1] ; reason
+
+		$x += 5
+	Next
+
+	$__g_io_aBanlist[0] = $x
+
+	; Remove cache
+	If FileExists($sBanlistFile) Then FileDelete($sBanlistFile)
+
+	Return True
+
+EndFunc   ;==>__Io_Ban_LoadToMemory
+
+Func __Io_Ban_SaveToFile($sBanlistFile = @ScriptName & ".banlist.ini")
+
+	; Remove cache
+	If FileExists($sBanlistFile) Then FileDelete($sBanlistFile)
+
+	Local $x = 0
+
+	For $i = 1 To $__g_io_aBanlist[0] Step +5
+
+		; Ignore sanctioned bans
+		If $__g_io_aBanlist[$i] <> "" Then
+			IniWrite($sBanlistFile, $x, "ip", $__g_io_aBanlist[$i])
+			IniWrite($sBanlistFile, $x, "created_at", $__g_io_aBanlist[$i + 1])
+			IniWrite($sBanlistFile, $x, "expires_at", $__g_io_aBanlist[$i + 2])
+			IniWrite($sBanlistFile, $x, "issued_by", $__g_io_aBanlist[$i + 3])
+			IniWrite($sBanlistFile, $x, "reason", $__g_io_aBanlist[$i + 4])
+			$x += 1
+		EndIf
+	Next
+
+EndFunc   ;==>__Io_Ban_SaveToFile
+
+Func __Io_SocketToIP(ByRef $socket) ;ty javiwhite
 	Local Const $hDLL = "Ws2_32.dll"
 	Local $structName = DllStructCreate("short;ushort;uint;char[8]")
 	Local $sRet = DllCall($hDLL, "int", "getpeername", "int", $socket, "ptr", DllStructGetPtr($structName), "int*", DllStructGetSize($structName))
@@ -1028,7 +1399,7 @@ Func __Io_SocketToIP(ByRef $socket) ;ty javiwhite
 		$sRet = DllCall($hDLL, "str", "inet_ntoa", "int", DllStructGetData($structName, 3))
 		If Not @error Then Return $sRet[0]
 	EndIf
-	Return "~unk~" ;Something went wrong, return an invalid IP
+	Return StringFormat("~%s.%s.%s.%s", Random(1, 255, 1), Random(1, 255, 1), Random(0, 10, 1), Random(1, 255, 1)) ;We assume this is a fake socket and just generate a random IP
 EndFunc   ;==>__Io_SocketToIP
 
 Func __Io_Init()
@@ -1037,6 +1408,9 @@ Func __Io_Init()
 EndFunc   ;==>__Io_Init
 
 Func __Io_Shutdown()
+	If $__g_io_whoami == $__e_io_SERVER Then
+		__Io_Ban_SaveToFile()
+	EndIf
 	TCPShutdown()
 EndFunc   ;==>__Io_Shutdown
 
@@ -1049,15 +1423,31 @@ Func __Io_Push(ByRef $a, $v, $bRedim = True)
 	Return $a[0]
 EndFunc   ;==>__Io_Push
 
-Func __Io_Push2x(ByRef $a, $v1, $v2, $bRedim = True)
-	If $bRedim Then
-		ReDim $a[$a[0] + 3]
-	EndIf
+Func __Io_Push2x(ByRef $a, $v1, $v2)
 	$a[$a[0] + 1] = $v1
 	$a[$a[0] + 2] = $v2
 	$a[0] += 2
 	Return $a[0]
 EndFunc   ;==>__Io_Push2x
+
+Func __Io_Push3x(ByRef $a, $v1, $v2, $v3)
+
+	$a[$a[0] + 1] = $v1
+	$a[$a[0] + 2] = $v2
+	$a[$a[0] + 3] = $v3
+	$a[0] += 3
+	Return $a[0]
+EndFunc   ;==>__Io_Push3x
+
+Func __Io_createTimestamp()
+	Return (@YEAR * 31556952) + (@MON * 2629746) + (@MDAY * 86400) + (@HOUR * 3600) + (@MIN * 60) + @SEC
+EndFunc   ;==>__Io_createTimestamp
+
+Func __Io_createFakeSocket($connectedSocket = Random(100, 999, 1))
+	Local $aExtendedSocket = __Io_createExtendedSocket($connectedSocket)
+	; Save socket
+	__Io_Push3x($__g_io_sockets, $aExtendedSocket[0], $aExtendedSocket[1], $aExtendedSocket[2])
+EndFunc   ;==>__Io_createFakeSocket
 
 Func __Io_ValidEventName(ByRef $sEventName)
 	Return StringRegExp($sEventName, "^[a-zA-Z 0-9_.:-]+$")

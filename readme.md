@@ -22,6 +22,18 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 
 ### Changelog
 
+**Version 1.4.0** (This update **DOES NOT** break scripts)
+ * Added a new server method: `_Io_getSockets` which will return an array of all sockets. See more in the doc
+ * Added a banning-system, see more at: `_Io_getBanlist`, `_Io_Ban`, `_Io_Sanction`, `_Io_IsBanned`
+ * Added a new default event for clients `banned`. See more at default events
+ * Added two new `client` and `server` methods `_Io_setEventPreScript` And `_Io_setEventPostScript`. The intent for these is to not DRY when doing debug \ tasks that requires to be ran before or after events.
+ * Added a new `client` and `server` method `_Io_ClearEvents`.
+ * Added a third optional parameter to `_Io_On` called `$socket`, you may only pass the socket returned from `_Io_Listen` or `_Io_Connect`. The intent for this change is to allow for server + client in the same envoirment.
+ * Added a second parameter to `_Io_Loop` called `$WhoAmI` which should used with the new enums `$_IO_SERVER` and `$_IO_CLIENT`. The intent for this change is to allow for server + client in the same envoirment.
+ * Added a new `client` method `_Io_TransferSocket`.
+ * Added a new `server` method `_Io_getActiveSocketCount`.
+ * Optimations, avoiding `Redim`s and unnecessary nested arrays as good as possible etc.
+
 **Version 1.3.0** (This update **DOES NOT** break scripts)
  * Got rid of unnecessary `Redim`s with sockets and subscriptions in the main loop (This increased write performence greatly)
  * Changed `$iMaxDeadSocketsBeforeTidy` from `100` to `1000`
@@ -104,17 +116,29 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 > Returns Array || String.
 > Default = Array of all properties. Available properties: "ip", "date".
 
+* `_Io_getSockets($bForceUpdate = False, $socket = $__g_io_mySocket, $whoAmI = $__g_io_whoami)`
+
+>
+> Returns all stored sockets, [$i + 0] = socket, [$i + 1] = ip, [$i + 2] = Date joined (YYYY-MM-DD HH:MM:SS)
+> Ubound wont work propery with this array, so use The `$aArr[1]` element to retrive the size. `For $i = 1 to $aArr[1] step +3 ......`. the socket is (Keyowrd) "Null" if the socket is dead.
+
 * `_Io_getDeadSocketCount()`
 
 >
-> Returns the number of all dead sockets
+> Returns the number of all dead sockets.
 >
 
 * `_Io_getSocketsCount()`
 
 
 >
-> Returns the number of all sockets (Regardless of state)
+> Returns the number of all sockets (Regardless of state).
+>
+
+* `_Io_getActiveSocketCount()`
+
+>
+> Returns the number of all active connections.
 >
 
 * `_Io_getMaxConnections()`
@@ -133,11 +157,38 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 >
 
 
+* `_Io_getBanlist($iEntry = Default)`
+
+> Returns an array of the whole banlist.
+> If `$iEntry` is set to any number but `Default` the data for that entry will be retuned instead.
+
+
+* `_Io_Ban($socketOrIp, $nTime = 3600, $sReason = "Banned", $sIssuedBy = "system")`
+
+> Ip ban and prevent incomming connections from a given socket \ ip.
+> Returns True all the time.
+> If a `$socket` is passed, the ip will be retrived from the socket and the client will be disconnected, upon reconnecting, the `banned` event will be emitted to the banned client (If they still are banned)
+
+
+* `_Io_Sanction($socketOrIp)`
+
+> Removes a previous banned ip address.
+> Returns `True` if the ban was removed, returns `False` if the ip could not be found.
+> If a `$socket` is passed, the ip will be retrived from the socket.
+
+* `_Io_IsBanned($socketOrIp)`
+
+> Checks if an ip exists in the banlist
+> Returns the `$index` of the banned ip if found, returns false if not found.
+> If a `$socket` is passed, the ip will be retrived from the socket.
+
+
 * `_Io_TidyUp()`
 
 > Re-builds array of active sockets.
 > Returns nothing.
 > Only use this function if `$iMaxDeadSocketsBeforeTidy` i set to `False`
+
 
 #### Client methods
 * `_Io_Connect($iAddress, $iPort, $bAutoReconnect = True)`
@@ -153,17 +204,31 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 > This function is invoked automatically if `$bAutoReconnect` is set to `True`.
 
 #### Server and Client methods
+
+* `_Io_setEventPreScript($fCallback)`
+
+> The callback defined for this function will be ran before an event takes place
+> Returns nothing.
+> The callback requires exactly two parameters `$sEventName` and `$sEventFuncName`
+
+* `_Io_setEventPostScript($fCallback)`
+
+> The callback defined for this function will be ran before an event takes place
+> Returns nothing.
+> The callback requires exactly two parameters `$sEventName` and `$sEventFuncName`
+
+
 * `_Io_getVer()`
 
 >
 > Returns the current (semantic version)[http://semver.org/] of the UDF
 >
 
-* `_Io_On(Const $sEventName, Const $fCallback)`
+* `_Io_On(Const $sEventName, Const $fCallback, $socket = $__g_io_mySocket)`
 
 > Binds an event.
 > Returns nothing.
-> `$fCallback` has to be an actual function reference, no strings!
+> `$fCallback` has to be an actual function reference. No strings!
 
 * `_Io_Emit(ByRef $socket, $sEventName, $p1, $p2, ...$p16)`
 
@@ -171,7 +236,7 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 > Returns nothing.
 > Only `1D-Arrays, Ints, Floats, Doubles, Ptrs, Binarys, Strings, Null-keywords or Bools` should be used as parameters.
 
-* `_Io_Loop(ByRef $socket)`
+* `_Io_Loop(ByRef $socket, $whoAmI = $__g_io_whoami)`
 
 > The event engine.
 > Returns a bool.
@@ -202,12 +267,28 @@ Yep yep, this is pretty much an attempt to port the existing project's concept [
 > Returns nothing.
 > Is set default to 4096 by both the server and the client.
 
+* `_Io_ClearEvents()`
+
+> Removes all events from the script.
+> Returngs nothing.
+
+* `_Io_TransferEvents($from, $to)`
+
+> Moves all the events from 1 socket to another.
+> Returns nothing
+
 ## Default events
 
 #### Server events
 * `connection`
 
 > Takes 1 parameter ($socket)
+
+### Client events
+
+* `banned`
+
+> Takes 5 parametsrs `($socket, $created_at, $expires_at, $sReason, $sIssuedBy)`
 
 #### Server and Client events
 * `disconnect`

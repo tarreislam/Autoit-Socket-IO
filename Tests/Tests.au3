@@ -70,18 +70,63 @@ Func testPackageHandling()
 EndFunc
 
 Func testFireEvents()
+	Global $__g_io_events[1000] = [0]
 	; Register event
-	Local $eventData = ["this:_sho uld-.be:OK", test_fakeCallback]
-	__Io_Push($__g_io_events, $eventData)
+	Local $socketConnectOrListen = 0xB00B5
+
+	__Io_Push3x($__g_io_events, "this:_sho uld-.be:OK", test_fakeCallback, $socketConnectOrListen)
 
 	Local $socket = 0xB00B5
 	Local $aParams = [1, 'test']
-	_UT_Assert(__Io_FireEvent($socket, $aParams, 'this:_sho uld-.be:OK'))
+	Local $parentSocket = $socketConnectOrListen
+	_UT_Assert(__Io_FireEvent($socket, $aParams, 'this:_sho uld-.be:OK', $parentSocket))
 EndFunc
 
 Func test_fakeCallback($socket, $string)
 	_UT_Assert(_UT_IS($socket, "equal", 0xB00B5))
 	_UT_Assert(_UT_IS($string, "equal", "test"))
+EndFunc
+
+Func test_banning()
+	; Create some space
+	Global $__g_io_aBanlist[6] = [0]; This is essentially what the _Io_listen invokes
+	Local Const $ip = @IPAddress1
+
+	_Io_Ban($ip)
+
+	_UT_Assert(_UT_IS(_Io_IsBanned($ip), "lesser", 1), "Failed to add " & $ip & " to banlist")
+	_Io_Sanction($ip)
+
+	_UT_Assert(_UT_IS(_Io_IsBanned($ip), "equal", False), $ip & " was never removed from banlist.")
+
+
+EndFunc
+
+Func test_misc()
+
+
+	Global $__g_io_sockets[10000] = [0]
+	Local $nSocketsToAdd = 16
+
+	For $i = 1 To $nSocketsToAdd
+		__Io_createFakeSocket()
+	Next
+
+	Local $nSockets = _Io_getSocketsCount()
+
+	_UT_Assert(_UT_IS($nSockets, 'equal', $nSocketsToAdd), 'The fake socket count is not equal to what _Io_getSocketsCount says...')
+
+
+EndFunc
+
+Func test_postAndPrescript($mock = Null, $mock2 = Null)
+	#forceref $mock, $mock2
+	_Io_setEventPreScript(test_postAndPrescript)
+	_Io_setEventPostScript(test_postAndPrescript)
+
+	_UT_Assert(IsFunc($__g_Io_fPreScript))
+	_UT_Assert(IsFunc($__g_Io_fPostScript))
+
 EndFunc
 
 Func test_public_basic_ClientServer()

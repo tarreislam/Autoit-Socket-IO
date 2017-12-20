@@ -39,6 +39,7 @@ Func testPackageHandling()
 
 	Local $created_package = StringToBinary(__Io_createPackage($sEventName, $aParams, $nParams))
 
+
 	; Since our test is a string, we loose-match this one
 	_UT_Assert(_UT_Is($Transported_Package, "equal", $created_package, False), '$created_package package is wrong')
 
@@ -56,14 +57,14 @@ Func testPackageHandling()
 
 		_UT_Assert(_UT_Is($sEventName, "equal", $sEventName2))
 
-		_UT_Assert(_UT_Is($aParams[0], "equal", $aParams2[1]))
-		_UT_Assert(_UT_Is($aParams[1], "equal", $aParams2[2]))
-		_UT_Assert(_UT_Is($aParams[2], "equal", $aParams2[3]))
-		_UT_Assert(_UT_Is($aParams[3], "equal", $aParams2[4]))
-		_UT_Assert(_UT_Is($aParams[4], "equal", $aParams2[5]))
-		_UT_Assert(_UT_Is($aParams[5], "equal", $aParams2[6]))
-		_UT_Assert(_UT_Is($aParams[6], "equal", $aParams2[7]))
-		_UT_Assert(_UT_Is($aParams[7], "equal", $aParams2[8]))
+		_UT_Assert(_UT_Is($aParams[0], "equal", $aParams2[2]))
+		_UT_Assert(_UT_Is($aParams[1], "equal", $aParams2[3]))
+		_UT_Assert(_UT_Is($aParams[2], "equal", $aParams2[4]))
+		_UT_Assert(_UT_Is($aParams[3], "equal", $aParams2[5]))
+		_UT_Assert(_UT_Is($aParams[4], "equal", $aParams2[6]))
+		_UT_Assert(_UT_Is($aParams[5], "equal", $aParams2[7]))
+		_UT_Assert(_UT_Is($aParams[6], "equal", $aParams2[8]))
+		_UT_Assert(_UT_Is($aParams[7], "equal", $aParams2[9]))
 
 	EndIf
 

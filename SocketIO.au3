@@ -22,36 +22,71 @@
 #include-once
 #include <Crypt.au3>
 #AutoIt3Wrapper_Au3Check_Parameters=-q -d -w 1 -w 2 -w 3 -w- 4 -w 5 -w 6 -w 7
-Global Const $__c_ver = "1.4.0"
+Global Const $__g_io_sVer = "1.5.0"
 Global Enum $__e_io_SERVER, $__e_io_CLIENT
 Global Enum $_IO_LOOP_SERVER, $_IO_LOOP_CLIENT
-Global $__g_io_isActive = Null, $__g_io_vCryptKey = Null, $__g_io_vCryptAlgId = Null, $__g_iBiggestSocketI = 0, $__g_io_sockets[1] = [0], $__g_io_aBanlist[1] = [0], $__g_io_socket_rooms[1] = [0], $__g_io_whoami, $__g_io_max_dead_sockets_count = 0, $__g_io_events[1000] = [0], $__g_io_mySocket, $__g_io_dead_sockets_count = 0, $__g_io_conn_ip, $__g_io_conn_port, $__g_io_AutoReconnect = False, $__g_io_nPacketSize = Null, $__g_io_nMaxConnections = Null, $__g_Io_fPreScript = Null, $__g_Io_fPostScript = Null
-
+Global $__g_io_DevDebug = False, _
+		$__g_io_isActive = Null, _
+		$__g_io_vCryptKey = Null, _
+		$__g_io_vCryptAlgId = Null, _
+		$__g_io_sOnEventPrefix = Null, _
+		$__g_iBiggestSocketI = 0, _
+		$__g_io_sockets[1] = [0], _
+		$__g_io_aBanlist[1] = [0], _
+		$__g_io_socket_rooms[1] = [0], _
+		$__g_io_whoami, _
+		$__g_io_max_dead_sockets_count = 0, _
+		$__g_io_events[1000] = [0], _
+		$__g_io_mySocket, _
+		$__g_io_dead_sockets_count = 0, _
+		$__g_io_conn_ip, _
+		$__g_io_conn_port, _
+		$__g_io_AutoReconnect = Null, _
+		$__g_io_nPacketSize = Null, _
+		$__g_io_nMaxPacketSize = Null, _
+		$__g_io_nMaxConnections = Null, _
+		$__g_Io_fPreScript = Null, _
+		$__g_Io_fPostScript = Null
 
 ; #FUNCTION# ====================================================================================================================
-; Name ..........: _Io_Listen
-; Description ...:
-; Syntax ........: _Io_Listen($iPort[, $iAddress = @IPAddress1[, $iMaxPendingConnections = Default[,
-;                  $iMaxDeadSocketsBeforeTidy = 1000[, $iMaxConnections = 100000]]]])
-; Parameters ....: $iPort               - an integer value.
-;                  $iAddress            - [optional] an integer value. Default is @IPAddress1.
-;                  $iMaxPendingConnections- [optional] an integer value. Default is Default.
-;                  $iMaxDeadSocketsBeforeTidy- [optional] an integer value. Default is 1000.
-;                  $iMaxConnections     - [optional] an integer value. Default is 100000.
+; Name ..........: _Io_DevDebug
+; Description ...: Enables debugging in console.
+; Syntax ........: _Io_DevDebug($bState)
+; Parameters ....: $bState              - a boolean value.
 ; Return values .: None
-; Author ........:  TarreTarreTarre
+; Author ........: TarreTarreTarre
 ; Modified ......:
 ; Remarks .......:
 ; Related .......:
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_Listen($iPort, $iAddress = @IPAddress1, $iMaxPendingConnections = Default, $iMaxDeadSocketsBeforeTidy = 1000, $iMaxConnections = 100000)
+Func _Io_DevDebug($bState)
+	$__g_io_DevDebug = $bState
+EndFunc   ;==>_Io_DevDebug
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_Listen
+; Description ...:  Server-side only. Listens for incomming connections.
+; Syntax ........: _Io_Listen($iPort[, $sAddress = @IPAddress1[, $iMaxPendingConnections = Default[,
+;                  $iMaxDeadSocketsBeforeTidy = 1000[, $iMaxConnections = 100000]]]])
+; Parameters ....: $iPort               - an integer value.
+;                  $sAddress            - [optional] a string value. Default is @IPAddress1.
+;                  $iMaxPendingConnections- [optional] an integer value. Default is Default.
+;                  $iMaxDeadSocketsBeforeTidy- [optional] an integer value. Default is 1000.
+;                  $iMaxConnections     - [optional] an integer value. Default is 100000.
+; Return values .: integer. Null + @error if error
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......: If `$iMaxDeadSocketsBeforeTidy` is set to `False`, you have to manually call `_Io_TidyUp` to get rid of dead sockets, otherwise the `iMaxConnections + 1` client that connects, will be instantly disconnected.
+; Related .......: _Io_Connect
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_Listen($iPort, $sAddress = @IPAddress1, $iMaxPendingConnections = Default, $iMaxDeadSocketsBeforeTidy = 1000, $iMaxConnections = 100000)
 	If Not __Io_Init() Then Return SetError(1, 0, Null)
-	Local $socket = TCPListen($iAddress, $iPort, $iMaxPendingConnections)
-	If @error Then Return SetError(2, 0, Null)
-	; Set default settings
-	_Io_setRecvPackageSize()
+	Local $socket = TCPListen($sAddress, $iPort, $iMaxPendingConnections)
+	If @error Then Return SetError(2, @error, Null)
 	$__g_io_whoami = $__e_io_SERVER
 	$__g_io_mySocket = $socket
 	$__g_io_max_dead_sockets_count = $iMaxDeadSocketsBeforeTidy
@@ -62,49 +97,74 @@ Func _Io_Listen($iPort, $iAddress = @IPAddress1, $iMaxPendingConnections = Defau
 	Global $__g_io_socket_rooms[$iMaxConnections + 1] = [0]
 	Global $__g_io_aBanlist[(($iMaxConnections / 4) * 5) + 1] = [0] ; 25% of max connections * 5 etries +1 for sizeslot
 	__Io_Ban_LoadToMemory()
+
+	If $__g_io_DevDebug Then
+		ConsoleWrite("-" & @TAB & "_Io_Listen: $__g_io_sVer " & $__g_io_sVer & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Listen: $sAddress " & $sAddress & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Listen: $iPort " & $iPort & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Listen: $__g_io_whoami " & ($__g_io_whoami == $_IO_LOOP_SERVER ? 'Server' : 'Client') & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Listen: $__g_io_mySocket " & $__g_io_mySocket & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Listen: $__g_io_max_dead_sockets_count " & $__g_io_max_dead_sockets_count & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Listen: $__g_io_nMaxConnections " & ($__g_io_nMaxConnections / 3) & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Listen: $__g_io_isActive " & $__g_io_isActive & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Listen: $__g_io_vCryptKey " & $__g_io_vCryptKey & @LF)
+	EndIf
+
 	Return $socket
 EndFunc   ;==>_Io_Listen
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Connect
-; Description ...:
-; Syntax ........: _Io_Connect($iAddress, $iPort[, $bAutoReconnect = False])
-; Parameters ....: $iAddress            - an integer value.
+; Description ...: Attempts to connect to a Server.
+; Syntax ........: _Io_Connect($sAddress, $iPort[, $bAutoReconnect = True])
+; Parameters ....: $sAddress            - a string value.
 ;                  $iPort               - an integer value.
-;                  $bAutoReconnect      - [optional] a boolean value. Default is False.
-; Return values .: None
+;                  $bAutoReconnect      - [optional] a boolean value. Default is True.
+; Return values .: integer. Null + @error if unable to connect.
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: if `$bAutoReconnect` is set to `False`. You must use `_Io_Connect` or `_Io_Reconnect` to establish a new connection.
+; Related .......: _Io_Reconnect
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_Connect($iAddress, $iPort, $bAutoReconnect = True)
+Func _Io_Connect($sAddress, $iPort, $bAutoReconnect = True)
 	If Not __Io_Init() Then Return SetError(1, 0, Null)
-	Local $socket = TCPConnect($iAddress, $iPort)
-	If @error Then Return SetError(@error, 0, Null)
-	; Set default settings
-	_Io_setRecvPackageSize()
+	Local $socket = TCPConnect($sAddress, $iPort)
+	If @error Then Return SetError(2, @error, Null)
 	;Global $__g_io_events[1001] = [0]
 	$__g_io_whoami = $__e_io_CLIENT
 	$__g_io_mySocket = $socket
-	$__g_io_conn_ip = $iAddress
+	$__g_io_conn_ip = $sAddress
 	$__g_io_conn_port = $iPort
 	$__g_io_AutoReconnect = $bAutoReconnect
 	$__g_io_isActive = True
+
+	If $__g_io_DevDebug Then
+		ConsoleWrite("-" & @TAB & "_Io_Connect: $__g_io_sVer " & $__g_io_sVer & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Connect: $sAddress " & $sAddress & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Connect: $iPort " & $iPort & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Connect: $__g_io_whoami " & ($__g_io_whoami == $_IO_LOOP_SERVER ? 'Server' : 'Client') & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Connect: $__g_io_mySocket " & $__g_io_mySocket & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Connect: $__g_io_conn_ip " & $__g_io_conn_ip & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Connect: $__g_io_conn_port " & $__g_io_conn_port & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Connect: $__g_io_AutoReconnect " & String($__g_io_AutoReconnect) & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Connect: $__g_io_isActive " & $__g_io_isActive & @LF)
+		ConsoleWrite("-" & @TAB & "_Io_Connect: $__g_io_vCryptKey " & $__g_io_vCryptKey & @LF)
+	EndIf
+
 	Return $socket
 EndFunc   ;==>_Io_Connect
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_EnableEncryption
-; Description ...:
+; Description ...: Encrypts data before transmission using AutoIt's Crypt.au3
 ; Syntax ........: _Io_EnableEncryption($sFileOrKey)
 ; Parameters ....: $sFileOrKey          - a string value.
-; Return values .: None
+; Return values .: `True` if successfully configured. Null + @error if wrongfully configured. Use @Extended to see which type of internal error is thrown.
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
+; Remarks .......: The encryption has to be configured equally on both sides for it to work.
 ; Related .......:
 ; Link ..........:
 ; Example .......: No
@@ -114,31 +174,27 @@ Func _Io_EnableEncryption($sFileOrKey, $CryptAlgId = $CALG_AES_256)
 	If FileExists($sFileOrKey) Then
 		$sFileOrKey = FileRead($sFileOrKey)
 		If @error Then
-			SetExtended(@error)
-			Return SetError(1, 0, Null)
+			Return SetError(1, @error, Null)
 		EndIf
 	EndIf
 
 	; Attempt to init Cryp
 	_Crypt_Startup()
 	If @error Then
-		SetExtended(@error)
-		Return SetError(2, 0, Null)
+		Return SetError(2, @error, Null)
 	EndIf
 
 	; Validate settings
 	Local $test_encrypt_data = _Crypt_EncryptData($test_string, $sFileOrKey, $CryptAlgId)
 
 	If @error Then
-		SetExtended(@error)
-		Return SetError(3, 0, Null)
+		Return SetError(3, @error, Null)
 	EndIf
 
 	Local $test_decrypt_data = _Crypt_DecryptData($test_encrypt_data, $sFileOrKey, $CryptAlgId)
 
 	If @error Then
-		SetExtended(@error)
-		Return SetError(4, 0, Null)
+		Return SetError(4, @error, Null)
 	EndIf
 
 	; Test encryption
@@ -148,14 +204,14 @@ Func _Io_EnableEncryption($sFileOrKey, $CryptAlgId = $CALG_AES_256)
 		Return True
 	EndIf
 
-	Return SetError(5, 0, Null)
+	Return SetError(5, -1, Null)
 EndFunc   ;==>_Io_EnableEncryption
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_setRecvPackageSize
-; Description ...:
-; Syntax ........: _Io_setRecvPackageSize([$nPackageSize = 2048])
-; Parameters ....: $nPackageSize        - [optional] a general number value. Default is 2048.
+; Description ...: Sets the maxlen for [TCPRecv](https://www.autoitscript.com/autoit3/docs/functions/TCPRecv.htm)
+; Syntax ........: _Io_setRecvPackageSize([$iPackageSize = 4096])
+; Parameters ....: $iPackageSize        - [optional] a general number value. Default is 4096
 ; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:
@@ -164,20 +220,37 @@ EndFunc   ;==>_Io_EnableEncryption
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_setRecvPackageSize($nPackageSize = 4096)
-	$__g_io_nPacketSize = $nPackageSize
+Func _Io_setRecvPackageSize($iPackageSize = 4096)
+	$__g_io_nPacketSize = $iPackageSize
 EndFunc   ;==>_Io_setRecvPackageSize
 
 ; #FUNCTION# ====================================================================================================================
-; Name ..........: _Io_Reconnect
-; Description ...:
-; Syntax ........: _Io_Reconnect(ByRef $socket)
-; Parameters ....:
+; Name ..........: _Io_setMaxRecvPackageSize
+; Description ...: Sets the threshold for the `flood` event
+; Syntax ........: _Io_setMaxRecvPackageSize([$iMaxPackageSize = $__g_io_nPacketSize])
+; Parameters ....: $iMaxPackageSize     - [optional] a general number value. Default is $__g_io_nPacketSize.
 ; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:
 ; Remarks .......:
 ; Related .......:
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_setMaxRecvPackageSize($iMaxPackageSize = $__g_io_nPacketSize)
+	$__g_io_nMaxPacketSize = $iMaxPackageSize
+EndFunc   ;==>_Io_setMaxRecvPackageSize
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_Reconnect
+; Description ...: Attempts to reconnect to the server
+; Syntax ........: _Io_Reconnect(Byref $socket)
+; Parameters ....: $socket              - [in/out] a socket.
+; Return values .: a new socket ID
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......: Client-side only. This function invokes `_Io_TransferSocket` which will cause the param $socket passed, to be replaced with the new socket.
+; Related .......: _Io_Connect, _Io_TransferSocket
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
@@ -191,7 +264,7 @@ EndFunc   ;==>_Io_Reconnect
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Subscribe
-; Description ...:
+; Description ...: Server-side only. Subscribes a socket to a room.
 ; Syntax ........: _Io_Subscribe(Byref $socket, $sRoomName)
 ; Parameters ....: $socket              - [in/out] a string value.
 ;                  $sRoomName           - a string value.
@@ -199,7 +272,7 @@ EndFunc   ;==>_Io_Reconnect
 ; Author ........: TarreTarreTarre
 ; Modified ......:
 ; Remarks .......:
-; Related .......:
+; Related .......: _Io_BroadcastToRoom, _Io_Unsubscribe
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
@@ -209,15 +282,15 @@ EndFunc   ;==>_Io_Subscribe
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Unsubscribe
-; Description ...:
+; Description ...: Server-side only. Unsubscribes a socket from a room.
 ; Syntax ........: _Io_Unsubscribe(Byref $socket, $sRoomName)
 ; Parameters ....: $socket              - [in/out] a string value.
 ;                  $sRoomName           - a string value.
 ; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: If $sRoomName is null, every subscription will expire for the given socket.
+; Related .......: _Io_Subscribe
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
@@ -234,13 +307,13 @@ EndFunc   ;==>_Io_Unsubscribe
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Disconnect
-; Description ...:
+; Description ...: Manually disconnect as Client or server / Disconnects a client
 ; Syntax ........: _Io_Disconnect([$socket = Null])
 ; Parameters ....: $socket              - [optional] a string value. Default is Null.
 ; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......: The difference with this method of disconnecting and disconnecting by mistake, is that we cause the loops and facade to be purged, and the user will have to listen\connect again
+; Remarks .......: This function will purge any previously set `_Io_LoopFacade` and cause `_Io_Loop` to return false. If the `$socket` parameter is set when running as a server, the id of that socket will be disconnected.
 ; Related .......:
 ; Link ..........:
 ; Example .......: No
@@ -257,14 +330,14 @@ EndFunc   ;==>_Io_Disconnect
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_LoopFacade
-; Description ...:
+; Description ...: A substitute for the `_Io_Loop`.
 ; Syntax ........: _Io_LoopFacade()
 ; Parameters ....:
 ; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: Should only be used with AdlibRegister. If `_Io_Disconnect` is invoked, this facade will also be un-registered. This function will not work properly if more than 1 `_Io_Connect` or `_Io_Listen` exists in the same script.
+; Related .......: _Io_Loop
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
@@ -274,14 +347,14 @@ EndFunc   ;==>_Io_LoopFacade
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Loop
-; Description ...:
+; Description ...: The event handler for this UDF.
 ; Syntax ........: _Io_Loop(Byref $socket)
 ; Parameters ....: $socket              - [in/out] a string value.
 ; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: Should only be used as the main While loop. The function will return false if the function `_Io_Disconnect` is invoked
+; Related .......: _Io_LoopFacade
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
@@ -341,6 +414,7 @@ Func _Io_Loop(ByRef $socket, $whoAmI = $__g_io_whoami)
 			; -------------
 			;	Check client alive-status and see if any data was transmitted to the server
 			; -------------
+
 			Local $aDeadSockets[1] = [0]
 
 			For $i = 1 To $__g_io_sockets[0] Step +3
@@ -351,16 +425,18 @@ Func _Io_Loop(ByRef $socket, $whoAmI = $__g_io_whoami)
 
 				$package = __Io_RecvPackage($client_socket)
 
-				; Check if client is offline
-				If @error Then
-					; Add socket ID to array of dead sockets
-					__Io_Push($aDeadSockets, $i)
+				Switch @error
+					Case 1 ; Dead client
+						; Add socket ID to array of dead sockets
+						__Io_Push($aDeadSockets, $i)
 
-					; Incr dead count
-					$__g_io_dead_sockets_count += 1
+						; Incr dead count
+						$__g_io_dead_sockets_count += 1
 
-					ContinueLoop
-				EndIf
+						ContinueLoop
+					Case 2 ; Client flooding (Exceeding $__g_io_nMaxPacketSize)
+						__Io_FireEvent($client_socket, $aParams, "flood", $socket)
+				EndSwitch
 
 				; Collect all Processed data, so we can invoke them all at once instead of one by one
 				If $package Then
@@ -408,14 +484,17 @@ Func _Io_Loop(ByRef $socket, $whoAmI = $__g_io_whoami)
 			;	Check server alive-status
 			; -------------
 
-			If @error Then
-				__Io_FireEvent($socket, $aParams, "disconnect", $socket) ; $socket two times is correct.
+			Switch @error
+				Case 1 ; Disconnected from server (Not by user)
+					__Io_FireEvent($socket, $aParams, "disconnect", $socket) ; $socket two times is correct.
+					; Reconnect if we need to
+					If $__g_io_AutoReconnect Then
+						_Io_Reconnect($socket)
+					EndIf
+				Case 2 ; Flooded by server
+					__Io_FireEvent($socket, $aParams, "flood", $socket) ; $socket two times is correct.
+			EndSwitch
 
-				; Reconnect if we need to
-				If $__g_io_AutoReconnect Then
-					_Io_Reconnect($socket)
-				EndIf
-			EndIf
 
 			; -------------
 			;	Parse incomming data
@@ -432,61 +511,98 @@ EndFunc   ;==>_Io_Loop
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_setEventPreScript
-; Description ...:
+; Description ...: Sets the user defined function to be called before every fired event.
 ; Syntax ........: _Io_setEventPreScript(Const $fCallback)
-; Parameters ....: $fCallback           - [const] a floating point value.
+; Parameters ....: $fCallback           - [Const] a floating point value.
 ; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: The callback requires exactly two parameters `$sEventName` and `$sEventFuncName`
+; Related .......: _Io_setEventPostScript
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_setEventPreScript(Const $fCallback)
-	If Not IsFunc($fCallback) Then Return SetError(1, 0, Null)
+	If Not IsFunc($fCallback) Or Not $fCallback == Null Then Return SetError(1, 0, Null)
 	$__g_Io_fPreScript = $fCallback
 EndFunc   ;==>_Io_setEventPreScript
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_setEventPostScript
-; Description ...:
+; Description ...: Sets the user defined function to be called after every fired event.
 ; Syntax ........: _Io_setEventPostScript(Const $fCallback)
-; Parameters ....: $fCallback           - [const] a floating point value.
+; Parameters ....: $fCallback           - [Const] a floating point value.
 ; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: The callback requires exactly three parameters `$sEventName`, `$sEventFuncName` and `$bSuccess`. If the event name callback failed. `$bSuccess` is false
+; Related .......: _Io_setEventPreScript
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_setEventPostScript(Const $fCallback)
-	If Not IsFunc($fCallback) Then Return SetError(1, 0, Null)
+	If Not IsFunc($fCallback) Or Not $fCallback == Null Then Return SetError(1, 0, Null)
 	$__g_Io_fPostScript = $fCallback
 EndFunc   ;==>_Io_setEventPostScript
 
 ; #FUNCTION# ====================================================================================================================
-; Name ..........: _Io_On
-; Description ...:
-; Syntax ........: _Io_On(Const $sEventName, Const $fCallback)
-; Parameters ....: $sEventName          - [const] a string value.
-;                  $fCallback           - [const] a floating point value.
-; Return values .: None
+; Name ..........: _Io_setOnPrefix
+; Description ...: Set the default prefix for `_Io_On` if not passing callback.
+; Syntax ........: _Io_setOnPrefix(Const $sPrefix)
+; Parameters ....: $sPrefix             - [const] a string value.
+; Return values .: @error if invalid prefix
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: only function-friendly names are allowed
+; Related .......: _Io_On
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_On(Const $sEventName, Const $fCallback, $socket = $__g_io_mySocket)
-	__Io_Push3x($__g_io_events, $sEventName, $fCallback, $socket)
+Func _Io_setOnPrefix(Const $sPrefix = '_On_')
+	If Not StringRegExp($sPrefix, '(?i)[a-z_]+[a-z_0-9]*') Then Return SetError(1)
+	$__g_io_sOnEventPrefix = $sPrefix
+EndFunc
+
+; #FUNCTION# ====================================================================================================================
+; Name ..........: _Io_On
+; Description ...: Binds an event
+; Syntax ........: _Io_On(Const $sEventName[, $fCallback = Null[, $socket = $__g_io_mySocket]])
+; Parameters ....: $sEventName          - [Const] a string value.
+;                  $fCallback           - [optional] a floating point value. Default is Null.
+;                  $socket              - [optional] a string value. Default is $__g_io_mySocket.
+; Return values .: None
+; Author ........: TarreTarreTarre
+; Modified ......:
+; Remarks .......: If $fCallback is set to null, the function will assume the prefix "_On_" is applied. Eg (_Io_On('test') will look for "Func _On_Test(...)" etc
+; Related .......: _Io_setOnPrefix
+; Link ..........:
+; Example .......: No
+; ===============================================================================================================================
+Func _Io_On(Const $sEventName, Const $fCallback = Null, $socket = $__g_io_mySocket)
+	Local $fCallbackName = IsFunc($fCallback) ? FuncName($fCallback) : $fCallback
+
+	If $fCallback == Null And Not StringRegExp($sEventName, '(?i)^[a-z_0-9]*$') Then
+		If $__g_io_DevDebug Then
+			ConsoleWrite("-" & @TAB & StringFormat('_Io_On: Failed to bind event "%s". Invalid eventname for autoCallback.', $sEventName) & @LF)
+		EndIf
+		Return SetError(1)
+	EndIf
+
+	If Not $fCallbackName Then
+		$fCallbackName = $__g_io_sOnEventPrefix & $sEventName
+	EndIf
+
+
+	If $__g_io_DevDebug Then
+		ConsoleWrite("-" & @TAB & StringFormat('_Io_On: Bound new event: %s => %s', $sEventName, $fCallbackName) & @LF)
+	EndIf
+
+	__Io_Push3x($__g_io_events, $sEventName, $fCallbackName, $socket)
 EndFunc   ;==>_Io_On
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Emit
-; Description ...:
+; Description ...: Send data to a given socket
 ; Syntax ........: _Io_Emit(Byref $socket, $sEventName[, $p1 = Default[, $p2 = Default[, $p3 = Default[, $p4 = Default[,
 ;                  $p5 = Default[, $p6 = Default[, $p7 = Default[, $p8 = Default[, $p9 = Default[, $p10 = Default]]]]]]]]]])
 ; Parameters ....: $socket              - [in/out] a string value.
@@ -501,11 +617,11 @@ EndFunc   ;==>_Io_On
 ;                  $p8                  - [optional] a pointer value. Default is Default.
 ;                  $p9                  - [optional] a pointer value. Default is Default.
 ;                  $p10                 - [optional] a pointer value. Default is Default.
-; Return values .: None
+; Return values .: Integer. Bytes sent
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: To pass more than 16 parameters, a special array can be passed in lieu of individual parameters. This array must have its first element set to "CallArgArray" and elements 1 - n will be passed as separate arguments to the function. If using this special array, no other arguments can be passed
+; Related .......: _Io_Broadcast, _Io_BroadcastToAll, _Io_BroadcastToRoom
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
@@ -517,17 +633,22 @@ Func _Io_Emit(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default, $p3 = De
 	; What to send
 	Local $aParams = [$p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9, $p10, $p11, $p12, $p13, $p14, $p15, $p16]
 
+	; Determine if a CallArgArray call is valid
+	If @NumParams == 3 And IsArray($p1) And $p1[0] == 'CallArgArray' Then
+		$aParams = $p1
+	EndIf
+
 	; Prepare package
 	Local $package = __Io_createPackage($sEventName, $aParams, @NumParams)
 
 	; attempt to send request
-	__Io_TransportPackage($socket, $package)
+	Return __Io_TransportPackage($socket, $package)
 
 EndFunc   ;==>_Io_Emit
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Broadcast
-; Description ...:
+; Description ...: Server-side only. Send data to every connected socket but a given one.
 ; Syntax ........: _Io_Broadcast(Byref $socket, $sEventName[, $p1 = Default[, $p2 = Default[, $p3 = Default[, $p4 = Default[,
 ;                  $p5 = Default[, $p6 = Default[, $p7 = Default[, $p8 = Default[, $p9 = Default[, $p10 = Default]]]]]]]]]])
 ; Parameters ....: $socket              - [in/out] a string value.
@@ -542,11 +663,11 @@ EndFunc   ;==>_Io_Emit
 ;                  $p8                  - [optional] a pointer value. Default is Default.
 ;                  $p9                  - [optional] a pointer value. Default is Default.
 ;                  $p10                 - [optional] a pointer value. Default is Default.
-; Return values .: None
+; Return values .: Integer. Bytes sent
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: To pass more than 16 parameters, a special array can be passed in lieu of individual parameters. This array must have its first element set to "CallArgArray" and elements 1 - n will be passed as separate arguments to the function. If using this special array, no other arguments can be passed
+; Related .......: _Io_Emit, _Io_BroadcastToAll, _Io_BroadcastToRoom
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
@@ -558,8 +679,14 @@ Func _Io_Broadcast(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default, $p3
 	; What to send
 	Local $aParams = [$p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9, $p10, $p11, $p12, $p13, $p14, $p15, $p16]
 
+	; Determine if a CallArgArray call is valid
+	If @NumParams == 3 And IsArray($p1) And $p1[0] == 'CallArgArray' Then
+		$aParams = $p1
+	EndIf
+
 	; Prepare package
 	Local $package = __Io_createPackage($sEventName, $aParams, @NumParams)
+	Local $bytesSent = 0
 
 	For $i = 1 To $__g_io_sockets[0] Step +3
 		Local $client_socket = $__g_io_sockets[$i]
@@ -568,17 +695,20 @@ Func _Io_Broadcast(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default, $p3
 		If Not $client_socket > 0 Or $socket == $client_socket Then ContinueLoop
 
 		; Send da package
-		__Io_TransportPackage($client_socket, $package)
+		$bytesSent += __Io_TransportPackage($client_socket, $package)
 
 		; Check if we can abort this loop
 		If $i >= $__g_iBiggestSocketI Then ExitLoop
 
 	Next
+
+	Return $bytesSent
+
 EndFunc   ;==>_Io_Broadcast
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_BroadcastToAll
-; Description ...:
+; Description ...: Server-side only. Send data to every connected socket, including the given one.
 ; Syntax ........: _Io_BroadcastToAll(Byref $socket, $sEventName[, $p1 = Default[, $p2 = Default[, $p3 = Default[, $p4 = Default[,
 ;                  $p5 = Default[, $p6 = Default[, $p7 = Default[, $p8 = Default[, $p9 = Default[, $p10 = Default]]]]]]]]]])
 ; Parameters ....: $socket              - [in/out] a string value.
@@ -593,11 +723,11 @@ EndFunc   ;==>_Io_Broadcast
 ;                  $p8                  - [optional] a pointer value. Default is Default.
 ;                  $p9                  - [optional] a pointer value. Default is Default.
 ;                  $p10                 - [optional] a pointer value. Default is Default.
-; Return values .: None
+; Return values .: Integer. Bytes sent
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: To pass more than 16 parameters, a special array can be passed in lieu of individual parameters. This array must have its first element set to "CallArgArray" and elements 1 - n will be passed as separate arguments to the function. If using this special array, no other arguments can be passed
+; Related .......: _Io_Emit, _Io_Broadcast, _Io_BroadcastToRoom
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
@@ -609,8 +739,14 @@ Func _Io_BroadcastToAll(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default
 	; What to send
 	Local $aParams = [$p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9, $p10, $p11, $p12, $p13, $p14, $p15, $p16]
 
+	; Determine if a CallArgArray call is valid
+	If @NumParams == 3 And IsArray($p1) And $p1[0] == 'CallArgArray' Then
+		$aParams = $p1
+	EndIf
+
 	; Prepare package
 	Local $package = __Io_createPackage($sEventName, $aParams, @NumParams)
+	Local $bytesSent = 0
 
 	For $i = 1 To $__g_io_sockets[0] Step +3
 		Local $client_socket = $__g_io_sockets[$i]
@@ -619,18 +755,20 @@ Func _Io_BroadcastToAll(ByRef $socket, $sEventName, $p1 = Default, $p2 = Default
 		If Not $client_socket > 0 Then ContinueLoop
 
 		; Send da package
-		__Io_TransportPackage($client_socket, $package)
+		$bytesSent += __Io_TransportPackage($client_socket, $package)
 
 		; Check if we can abort this loop
 		If $i >= $__g_iBiggestSocketI Then ExitLoop
 
 	Next
 
+	Return $bytesSent
+
 EndFunc   ;==>_Io_BroadcastToAll
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_BroadcastToRoom
-; Description ...:
+; Description ...: Server-side only. Send data to every connected socket in a given room.
 ; Syntax ........: _Io_BroadcastToRoom(Byref $socket, $sDesiredRoomName, $sEventName[, $p1 = Default[, $p2 = Default[, $p3 = Default[,
 ;                  $p4 = Default[, $p5 = Default[, $p6 = Default[, $p7 = Default[, $p8 = Default[, $p9 = Default[,
 ;                  $p10 = Default[, $p11 = Default[, $p12 = Default[, $p13 = Default[, $p14 = Default[, $p15 = Default[,
@@ -640,11 +778,11 @@ EndFunc   ;==>_Io_BroadcastToAll
 ;                  $sEventName          - a string value.
 ;                  $p1                  - [optional] a pointer value. Default is Default.
 ;                  $p16                 - [optional] a pointer value. Default is Default.
-; Return values .: None
-; Author ........: Your Name
+; Return values .: Integer. Bytes sent
+; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: To pass more than 16 parameters, a special array can be passed in lieu of individual parameters. This array must have its first element set to "CallArgArray" and elements 1 - n will be passed as separate arguments to the function. If using this special array, no other arguments can be passed
+; Related .......: _Io_Emit, _Io_Broadcast, _Io_BroadcastToAll, _Io_Subscribe
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
@@ -656,8 +794,14 @@ Func _Io_BroadcastToRoom(ByRef $socket, $sDesiredRoomName, $sEventName, $p1 = De
 	; What to send
 	Local $aParams = [$p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9, $p10, $p11, $p12, $p13, $p14, $p15, $p16]
 
+	; Determine if a CallArgArray call is valid
+	If @NumParams == 4 And IsArray($p1) And $p1[0] == 'CallArgArray' Then
+		$aParams = $p1
+	EndIf
+
 	; Prepare package
 	Local $package = __Io_createPackage($sEventName, $aParams, @NumParams - 1) ; - 1 since we have more params
+	Local $bytesSent = 0
 
 	For $i = 1 To $__g_io_socket_rooms[0] Step +2
 		Local $client_socket = $__g_io_socket_rooms[$i]
@@ -669,28 +813,30 @@ Func _Io_BroadcastToRoom(ByRef $socket, $sDesiredRoomName, $sEventName, $p1 = De
 
 		; Check if this is the room we want to send to
 		If $sDesiredRoomName == $sRoomName Then
-			__Io_TransportPackage($client_socket, $package)
+			$bytesSent += __Io_TransportPackage($client_socket, $package)
 		EndIf
 
 	Next
+
+	Return $bytesSent
 
 EndFunc   ;==>_Io_BroadcastToRoom
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_socketGetProperty
-; Description ...:
+; Description ...:  Server-side only. Retrieves information about the socket. Available properties: "ip", "date".
 ; Syntax ........: _Io_socketGetProperty(Byref $socket[, $sProp = Default])
 ; Parameters ....: $socket              - [in/out] a string value.
 ;                  $sProp               - [optional] a string value. Default is Default.
-; Return values .: None
+; Return values .: A given property in string. Null + @error if fail
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
+; Remarks .......: If $sProp is set to `Default` then an array containing two elements will be returned.
 ; Related .......:
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
-Func _Io_socketGetProperty(ByRef $socket, $sProp = Default)
+Func _Io_socketGetProperty(Const ByRef $socket, $sProp = Default)
 	; Get property from socket
 	For $i = 1 To $__g_io_sockets[0] Step +3
 
@@ -726,30 +872,30 @@ EndFunc   ;==>_Io_socketGetProperty
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_getVer
-; Description ...:
+; Description ...: Returns the version of the UDF
 ; Syntax ........: _Io_getVer()
 ; Parameters ....:
-; Return values .: None
+; Return values .: SEMVER string (X.Y.Z)
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
+; Remarks .......: See more on semver @ http://semver.org/
 ; Related .......:
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_getVer()
-	Return $__c_ver
+	Return $__g_io_sVer
 EndFunc   ;==>_Io_getVer
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_getSocketsCount
-; Description ...:
+; Description ...:  Server-side only. Returns the number of all sockets regardless of state.
 ; Syntax ........: _Io_getSocketsCount()
 ; Parameters ....:
-; Return values .: None
+; Return values .: integer
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
+; Remarks .......: Includes disconnected sockets.
 ; Related .......:
 ; Link ..........:
 ; Example .......: No
@@ -760,10 +906,10 @@ EndFunc   ;==>_Io_getSocketsCount
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_getDeadSocketCount
-; Description ...:
+; Description ...:  Server-side only. Returns the number of all dead sockets.
 ; Syntax ........: _Io_getDeadSocketCount()
 ; Parameters ....:
-; Return values .: None
+; Return values .: integer
 ; Author ........: TarreTarreTarre
 ; Modified ......:
 ; Remarks .......:
@@ -775,13 +921,12 @@ Func _Io_getDeadSocketCount()
 	Return $__g_io_dead_sockets_count
 EndFunc   ;==>_Io_getDeadSocketCount
 
-
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_getActiveSocketCount
-; Description ...:
+; Description ...: Server-side only. Returns the number of all active sockets.
 ; Syntax ........: _Io_getActiveSocketCount()
 ; Parameters ....:
-; Return values .: None
+; Return values .: integer
 ; Author ........: TarreTarreTarre
 ; Modified ......:
 ; Remarks .......:
@@ -795,15 +940,15 @@ EndFunc   ;==>_Io_getActiveSocketCount
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_getSockets
-; Description ...:
+; Description ...: Returns all stored sockets, [$i + 0] = socket, [$i + 1] = ip, [$i + 2] = Date joined (YYYY-MM-DD HH:MM:SS)
 ; Syntax ........: _Io_getSockets([$bForceUpdate = False[, $socket = $__g_io_mySocket[, $whoAmI = $__g_io_whoami]]])
 ; Parameters ....: $bForceUpdate        - [optional] a boolean value. Default is False.
 ;                  $socket              - [optional] a string value. Default is $__g_io_mySocket.
 ;                  $whoAmI              - [optional] an unknown value. Default is $__g_io_whoami.
-; Return values .: None
+; Return values .: Array
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
+; Remarks .......: Ubound wont work propery with this array, so use The `$aArr[1]` element to retrive the size. `For $i = 1 to $aArr[1] step +3 ......`. the socket is (Keyowrd) "Null" if the socket is dead.
 ; Related .......:
 ; Link ..........:
 ; Example .......: No
@@ -818,10 +963,10 @@ EndFunc   ;==>_Io_getSockets
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_getMaxConnections
-; Description ...:
+; Description ...:  Server-side only.Returns the maximum allowed connections
 ; Syntax ........: _Io_getMaxConnections()
 ; Parameters ....:
-; Return values .: None
+; Return values .: integer
 ; Author ........: TarreTarreTarre
 ; Modified ......:
 ; Remarks .......:
@@ -835,14 +980,14 @@ EndFunc   ;==>_Io_getMaxConnections
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_getMaxDeadSocketsCount
-; Description ...:
+; Description ...: Returns the maximum dead sockets before an `_Io_TidyUp() ` is triggered
 ; Syntax ........: _Io_getMaxDeadSocketsCount()
 ; Parameters ....:
-; Return values .: None
+; Return values .: integer
 ; Author ........: TarreTarreTarre
 ; Modified ......:
 ; Remarks .......:
-; Related .......:
+; Related .......: _Io_TidyUp
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
@@ -852,14 +997,14 @@ EndFunc   ;==>_Io_getMaxDeadSocketsCount
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_getBanlist
-; Description ...:
+; Description ...: Server-side only. Returns all / specific banlist entry.
 ; Syntax ........: _Io_getBanlist([$iEntry = Default])
 ; Parameters ....: $iEntry              - [optional] an integer value. Default is Default.
-; Return values .: None
+; Return values .: Array
 ; Author ........: TarreTarreTarre
 ; Modified ......:
 ; Remarks .......:
-; Related .......:
+; Related .......: _Io_Ban, _Io_Sanction, _Io_IsBanned
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
@@ -872,7 +1017,7 @@ EndFunc   ;==>_Io_getBanlist
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Ban
-; Description ...:
+; Description ...: Server-side only. Ip ban and prevent incomming connections from a given ip.
 ; Syntax ........: _Io_Ban($socketOrIp[, $nTime = 3600[, $sReason = "Banned"[, $sIssuedBy = "system"]]])
 ; Parameters ....: $socketOrIp          - a string value.
 ;                  $nTime               - [optional] a general number value. Default is 3600.
@@ -881,8 +1026,8 @@ EndFunc   ;==>_Io_getBanlist
 ; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: $nTime is seconds. Default is therefore 1 hour. A banned client will receive the `banned` event when trying to connect. If you close the server. All bans will persist when you start it up again.
+; Related .......: _Io_getBanlist, _Io_Sanction, _Io_IsBanned
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
@@ -891,7 +1036,7 @@ Func _Io_Ban($socketOrIp, $nTime = 3600, $sReason = "Banned", $sIssuedBy = "syst
 	Local Const $expires_at = $created_at + $nTime
 	Local $isSocket = False, $originalSocket = Null
 
-	; fetch ip
+	; Convert sockets to ip
 	If StringRegExp($socketOrIp, "^\d+$") Then
 		; Save the socket for later use
 		$originalSocket = $socketOrIp
@@ -919,18 +1064,19 @@ EndFunc   ;==>_Io_Ban
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_Sanction
-; Description ...:
+; Description ...: Server-side only. Remove a previously set ban.
 ; Syntax ........: _Io_Sanction($socketOrIp)
 ; Parameters ....: $socketOrIp          - a string value.
-; Return values .: None
+; Return values .: Bool. `True` if successfully unbanned. `False` if socket was not found.
 ; Author ........: TarreTarreTarre
 ; Modified ......:
 ; Remarks .......:
-; Related .......:
+; Related .......: _Io_getBanlist, _Io_Ban, _Io_IsBanned
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_Sanction($socketOrIp)
+	; Convert sockets to ip
 	If StringRegExp($socketOrIp, "^\d+$") Then $socketOrIp = _Io_socketGetProperty($socketOrIp, "ip")
 
 	Local $isBanned = _Io_IsBanned($socketOrIp)
@@ -950,18 +1096,19 @@ EndFunc   ;==>_Io_Sanction
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_IsBanned
-; Description ...:
+; Description ...: Server-side only. Checks if an ip exists in the banlist
 ; Syntax ........: _Io_IsBanned($socketOrIp)
 ; Parameters ....: $socketOrIp          - a string value.
-; Return values .: None
+; Return values .: Returns the `$index` of the banned ip if found, returns false if not found.
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
-; Related .......:
+; Remarks .......: If a `$socket` is passed, the ip will be retrived from the socket.
+; Related .......: _Io_getBanlist, _Io_Ban, _Io_Sanction
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_IsBanned($socketOrIp)
+	; Convert sockets to ip
 	If StringRegExp($socketOrIp, "^\d+$") Then $socketOrIp = _Io_socketGetProperty($socketOrIp, "ip")
 	Local Const $now = __Io_createTimestamp()
 	Local $isBanned
@@ -984,7 +1131,7 @@ EndFunc   ;==>_Io_IsBanned
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_ClearEvents
-; Description ...:
+; Description ...: Removes all events from the script.
 ; Syntax ........: _Io_ClearEvents()
 ; Parameters ....:
 ; Return values .: None
@@ -1001,20 +1148,21 @@ EndFunc   ;==>_Io_ClearEvents
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_TransferSocket
-; Description ...:
+; Description ...: Transfer the socket id and events to a new Socket.
 ; Syntax ........: _Io_TransferSocket(Byref $from, Byref $to)
 ; Parameters ....: $from                - [in/out] a floating point value.
 ;                  $to                  - [in/out] a dll struct value.
 ; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
+; Remarks .......: $from is replaced by $to. So there is no need to do something like this "$to = _Io_TransferSocket($from, $to)"
 ; Related .......:
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_TransferSocket(ByRef $from, ByRef $to)
 
+	; Transfer socket events
 	For $i = 1 To $__g_io_events[0] Step +3
 		If $__g_io_events[$i + 2] == $from Then $__g_io_events[$i + 2] = $to
 	Next
@@ -1023,9 +1171,10 @@ Func _Io_TransferSocket(ByRef $from, ByRef $to)
 	$from = $to
 
 EndFunc   ;==>_Io_TransferSocket
+
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_TidyUp
-; Description ...:
+; Description ...:  Server-side only. Frees some memory by rebuilding arrays and more.
 ; Syntax ........: _Io_TidyUp()
 ; Parameters ....:
 ; Return values .: None
@@ -1087,82 +1236,97 @@ Func _Io_TidyUp()
 EndFunc   ;==>_Io_TidyUp
 
 ; ~ Internal functions
-Func __Io_FireEvent(ByRef $socket, ByRef $r_params, $sEventName, ByRef $parentSocket)
+Func __Io_FireEvent(Const ByRef $socket, ByRef $r_params, $sEventName, Const ByRef $parentSocket)
+
+	If $__g_io_DevDebug Then
+		ConsoleWrite("-" & @TAB & "__Io_FireEvent: attempting to fire event '" & $sEventName & "' with socket " & $socket & " from parentSocket " & $parentSocket & @LF)
+	EndIf
 
 	For $i = 1 To $__g_io_events[0] Step +3
 
-		Local $fCallback = $__g_io_events[$i + 1]
+		Local $fCallbackName = $__g_io_events[$i + 1]
 
 		If $__g_io_events[$i] == $sEventName And $__g_io_events[$i + 2] == $parentSocket Then
-			Local $fCallbackName = FuncName($fCallback)
-			If $__g_Io_fPreScript Then $__g_Io_fPreScript($sEventName, $fCallbackName)
-			__Io_InvokeCallback($socket, $r_params, $fCallback)
-			If $__g_Io_fPostScript Then $__g_Io_fPostScript($sEventName, $fCallbackName)
+
+			If $__g_io_DevDebug Then
+				ConsoleWrite("-" & @TAB & "__Io_FireEvent: Event found!" & @LF)
+			EndIf
+
+			If $__g_Io_fPreScript <> Null Then $__g_Io_fPreScript($sEventName, $fCallbackName)
+
+			Local $bSuccess = __Io_InvokeCallback($socket, $r_params, $fCallbackName)
+
+			If $__g_Io_fPostScript <> Null Then $__g_Io_fPostScript($sEventName, $fCallbackName, $bSuccess)
+
 			Return True
 		EndIf
 	Next
+
+	If $__g_io_DevDebug Then
+		ConsoleWrite("-" & @TAB & "__Io_FireEvent: No event found on parentSocket" & @LF)
+	EndIf
 
 	Return False
 
 EndFunc   ;==>__Io_FireEvent
 
-Func __Io_InvokeCallback(ByRef $socket, ByRef $r_params, Const $fCallback)
+Func __Io_InvokeCallback(Const ByRef $socket, ByRef $r_params, Const $fCallbackName)
 
-	Local Const $x = IsArray($r_params) ? $r_params[0] : 0
 
-	Switch $x
-		Case 0
-			$fCallback($socket)
-		Case 1
-			$fCallback($socket, $r_params[1])
-		Case 2
-			$fCallback($socket, $r_params[1], $r_params[2])
-		Case 3
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3])
-		Case 4
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4])
-		Case 5
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4], $r_params[5])
-		Case 6
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4], $r_params[5], $r_params[6])
-		Case 7
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4], $r_params[5], $r_params[6], $r_params[7])
-		Case 8
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4], $r_params[5], $r_params[6], $r_params[7], $r_params[8])
-		Case 9
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4], $r_params[5], $r_params[6], $r_params[7], $r_params[8], $r_params[9])
-		Case 10
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4], $r_params[5], $r_params[6], $r_params[7], $r_params[8], $r_params[9], $r_params[10])
-		Case 11
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4], $r_params[5], $r_params[6], $r_params[7], $r_params[8], $r_params[9], $r_params[10], $r_params[11])
-		Case 12
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4], $r_params[5], $r_params[6], $r_params[7], $r_params[8], $r_params[9], $r_params[10], $r_params[11], $r_params[12])
-		Case 13
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4], $r_params[5], $r_params[6], $r_params[7], $r_params[8], $r_params[9], $r_params[10], $r_params[11], $r_params[12], $r_params[13])
-		Case 14
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4], $r_params[5], $r_params[6], $r_params[7], $r_params[8], $r_params[9], $r_params[10], $r_params[11], $r_params[12], $r_params[13], $r_params[14])
-		Case 15
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4], $r_params[5], $r_params[6], $r_params[7], $r_params[8], $r_params[9], $r_params[10], $r_params[11], $r_params[12], $r_params[13], $r_params[14], $r_params[15])
-		Case 16
-			$fCallback($socket, $r_params[1], $r_params[2], $r_params[3], $r_params[4], $r_params[5], $r_params[6], $r_params[7], $r_params[8], $r_params[9], $r_params[10], $r_params[11], $r_params[12], $r_params[13], $r_params[14], $r_params[15], $r_params[16])
-	EndSwitch
+	If Not IsArray($r_params) Then
+		Dim $r_params[2] = ['CallArgArray', $socket]
+	Else
+		$r_params[1] = $socket
+	EndIf
+
+	If $__g_io_DevDebug Then
+		ConsoleWrite("-" & @TAB & "__Io_InvokeCallback: attempting to invoke " & $fCallbackName & " with " & UBound($r_params) - 1 & " parameters. $socket-param included." & @LF)
+	EndIf
+
+	Call($fCallbackName, $r_params)
+
+	If @error == 0xDEAD And @extended == 0xBEEF Then
+
+		If $__g_io_DevDebug Then
+			ConsoleWrite("-" & @TAB & '__Io_InvokeCallback: the callback "' & $fCallbackName & '" failed with DEAD BEEF' & @LF)
+		EndIf
+
+		Return False
+	EndIf
+
+
+	If $__g_io_DevDebug Then
+		ConsoleWrite("-" & @TAB & '__Io_InvokeCallback: Successfully invoked "' & $fCallbackName & '".' & @LF)
+	EndIf
+
 
 	Return True
 
 EndFunc   ;==>__Io_InvokeCallback
 
-Func __Io_createPackage(ByRef $sEventName, ByRef $aParams, Const $NumParams)
+Func __Io_createPackage(ByRef $sEventName, ByRef $aParams, $NumParams)
+	Local $startParamI = 3
 
 	; Build da package
 	Local $sPackage = $sEventName & ($NumParams > 2 ? @LF : "")
 
+	; Determine type of params passed
+	If $aParams[0] == 'CallArgArray'  Then
+		$startParamI = 4
+		$NumParams = UBound($aParams) - 2; -2 so we ignore  the CallArgArray
+	EndIf
+
 	; append parameters
-	For $i = 3 To $NumParams
+	For $i = $startParamI To $NumParams
 		$sPackage &= __Io_data2stringary($aParams[$i - 3]) & ($i < $NumParams ? @LF : "")
 	Next
 
 	; Strap
 	$sPackage &= "#"
+
+	If $__g_io_DevDebug Then
+		ConsoleWrite("-" & @TAB & "__Io_createPackage: " & StringReplace($sPackage, @LF, '\n') & @LF)
+	EndIf
 
 	; Return Package
 	Return $sPackage
@@ -1171,6 +1335,11 @@ EndFunc   ;==>__Io_createPackage
 Func __Io_getProductsFromPackage(ByRef $sPackage)
 	; Clean package
 	$sPackage = StringRegExpReplace($sPackage, "(?s)(.*)\#$", "$1")
+
+	If $__g_io_DevDebug Then
+		Local $nPackageSize = StringReplace($sPackage, @LF, '\n')
+		ConsoleWrite("-" & @TAB & "__Io_getProductsFromPackage(" & StringLen($nPackageSize) & "): " & StringReplace($sPackage, @LF, '\n') & @LF)
+	EndIf
 
 	; Split the package(s) into wrapped products
 	Local $aWrapped_products = StringSplit($sPackage, "#")
@@ -1191,11 +1360,12 @@ Func __Io_getProductsFromPackage(ByRef $sPackage)
 		Local $sEventName = $aWrapped_parts[1]
 
 		; Translate params
-		Local $aParams[$cnWrapped_size]
-		$aParams[0] = $cnWrapped_size - 1
+		Local $aParams[$cnWrapped_size + 1]
+		$aParams[0] = 'CallArgArray' ; This is required, otherwise, Call() will not recognize the array as containing arguments.  ;$cnWrapped_size - 1
+		$aParams[1] = '<socket>'
 
 		For $y = 2 To $cnWrapped_size
-			$aParams[$y - 1] = __Io_stringary2data($aWrapped_parts[$y])
+			$aParams[$y] = __Io_stringary2data($aWrapped_parts[$y])
 		Next
 
 		; Create finished product
@@ -1207,7 +1377,7 @@ Func __Io_getProductsFromPackage(ByRef $sPackage)
 
 EndFunc   ;==>__Io_getProductsFromPackage
 
-Func __Io_handlePackage(ByRef $socket, ByRef $sPackage, ByRef $parentSocket)
+Func __Io_handlePackage(Const ByRef $socket, ByRef $sPackage, ByRef $parentSocket)
 	Local $products = __Io_getProductsFromPackage($sPackage) ;0 event; 1 array of params
 
 	For $w = 1 To $products[0]
@@ -1305,31 +1475,40 @@ Func __Io_stringary2data($sDataInput, $bArrLoop = False)
 
 EndFunc   ;==>__Io_stringary2data
 
-Func __Io_TransportPackage(ByRef $socket, ByRef $sPackage)
+Func __Io_TransportPackage(Const ByRef $socket, ByRef $sPackage, Const $bRawPackets = False)
 	Local $final_package
 
 	; Check if we should encrypt the data
 	If $__g_io_vCryptKey Then
 		$final_package = _Crypt_EncryptData($sPackage, $__g_io_vCryptKey, $__g_io_vCryptAlgId)
-	Else
+	ElseIf $bRawPackets == False Then
 		$final_package = StringToBinary($sPackage)
+	ElseIf $bRawPackets == True Then
+		; Do not modify if
 	EndIf
 
-
-	TCPSend($socket, $final_package)
+	Return TCPSend($socket, $final_package)
 EndFunc   ;==>__Io_TransportPackage
 
-Func __Io_RecvPackage(ByRef $socket)
-	Local $package = TCPRecv($socket, $__g_io_nPacketSize, 1)
-	If @error Then Return SetError(@error, 0, "")
+Func __Io_RecvPackage(ByRef $socket, Const $bRawPackets = False)
+	Local $package = TCPRecv($socket, 1, 1)
+	If @error Then Return SetError(1, 0, Null) ; Connection lost
 	If $package == "" Then Return Null
+
+	; Fetch all data from the buffer
+	Do
+		Local $TCPRecv = TCPRecv($socket, $__g_io_nPacketSize, 1)
+		$package &= $TCPRecv
+
+		If StringLen($package) >= $__g_io_nMaxPacketSize Then Return SetError(2, 0, Null)
+	Until $TCPRecv == ""
 
 	; Check if we want to decrypt our data
 	If $__g_io_vCryptKey Then
 		$package = _Crypt_DecryptData($package, $__g_io_vCryptKey, $__g_io_vCryptAlgId)
 	EndIf
 
-	Return BinaryToString($package)
+	Return Not $bRawPackets ? BinaryToString($package) : $package
 EndFunc   ;==>__Io_RecvPackage
 
 Func __Io_createExtendedSocket(ByRef $socket) ;Actual socket, ip address, date
@@ -1403,6 +1582,17 @@ Func __Io_SocketToIP(ByRef $socket) ;ty javiwhite
 EndFunc   ;==>__Io_SocketToIP
 
 Func __Io_Init()
+	Local Static $firstInit = True
+
+	If $firstInit Then
+		; Set default settings for first use
+		If Not $__g_io_nPacketSize Then _Io_setRecvPackageSize()
+		If Not $__g_io_nMaxPacketSize Then _Io_setMaxRecvPackageSize()
+		If Not $__g_io_sOnEventPrefix Then _Io_setOnPrefix()
+		$firstInit = False
+	EndIf
+
+	Opt('TCPTimeout', 5); https://www.autoitscript.com/trac/autoit/ticket/3575
 	OnAutoItExitRegister("__Io_Shutdown")
 	Return TCPStartup()
 EndFunc   ;==>__Io_Init
@@ -1431,7 +1621,6 @@ Func __Io_Push2x(ByRef $a, $v1, $v2)
 EndFunc   ;==>__Io_Push2x
 
 Func __Io_Push3x(ByRef $a, $v1, $v2, $v3)
-
 	$a[$a[0] + 1] = $v1
 	$a[$a[0] + 2] = $v2
 	$a[$a[0] + 3] = $v3

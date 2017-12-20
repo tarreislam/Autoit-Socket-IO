@@ -1,5 +1,5 @@
 #include "..\socketIO.au3"
-
+_Io_DevDebug(True)
 If Not @Compiled Then
 	MsgBox(0, "", "You should compile me")
 	;Exit

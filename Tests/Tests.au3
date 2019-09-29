@@ -71,11 +71,11 @@ Func testPackageHandling()
 EndFunc
 
 Func testFireEvents()
-	Global $__g_io_events[1000] = [0]
+	Global $g__io_events[1000] = [0]
 	; Register event
 	Local $socketConnectOrListen = 0xB00B5
 
-	__Io_Push3x($__g_io_events, "this:_sho uld-.be:OK", test_fakeCallback, $socketConnectOrListen)
+	__Io_Push3x($g__io_events, "this:_sho uld-.be:OK", test_fakeCallback, $socketConnectOrListen)
 
 	Local $socket = 0xB00B5
 	Local $aParams = [1, 'test']
@@ -90,7 +90,7 @@ EndFunc
 
 Func test_banning()
 	; Create some space
-	Global $__g_io_aBanlist[6] = [0]; This is essentially what the _Io_listen invokes
+	Global $g__io_aBanlist[6] = [0]; This is essentially what the _Io_listen invokes
 	Local Const $ip = @IPAddress1
 
 	_Io_Ban($ip)
@@ -106,7 +106,7 @@ EndFunc
 Func test_misc()
 
 
-	Global $__g_io_sockets[10000] = [0]
+	Global $g__io_sockets[10000] = [0]
 	Local $nSocketsToAdd = 16
 
 	For $i = 1 To $nSocketsToAdd
@@ -120,15 +120,6 @@ Func test_misc()
 
 EndFunc
 
-Func test_postAndPrescript($mock = Null, $mock2 = Null)
-	#forceref $mock, $mock2
-	_Io_setEventPreScript(test_postAndPrescript)
-	_Io_setEventPostScript(test_postAndPrescript)
-
-	_UT_Assert(IsFunc($__g_Io_fPreScript))
-	_UT_Assert(IsFunc($__g_Io_fPostScript))
-
-EndFunc
 
 Func test_public_basic_ClientServer()
 	Local Const $MessageToSendFromServerToClient = "Hi again!"
@@ -326,4 +317,151 @@ Func test_public_TidyUp()
 
 	_UT_Assert(_UT_Is(_UT_Get('_Io_getDeadSocketCount'), 'equal', 0, False), 'Automatic tidyup did not work correctly')
 
+EndFunc
+
+
+Func test_GetAndSetCustomProperties()
+
+	; Setup
+	_Io_setPropertyDomainPrefix("test")
+	Local $socket = __Io_createFakeSocket()
+
+	_Io_socketSetProperty($socket, 'testProperty', 1337)
+	_Io_socketSetProperty($socket, 'testProperty invalid', 1337)
+
+	Local $retrievedValue = _Io_socketGetproperty($socket, 'testProperty', False)
+	Local $retrievedValueInvalid = _Io_socketGetproperty($socket, 'testProperty invalid', False)
+
+	_UT_Assert(_UT_Is($retrievedValue, "equal", 1337), "$retrievedValue (" & $retrievedValue & ') is not equal to 1337')
+	_UT_Assert(_UT_Is($retrievedValueInvalid, "equal", False), "$retrievedValue (" & $retrievedValue & ') is not equal to 1337')
+
+EndFunc
+
+
+Func test_SearchForProperties()
+
+	; Setup
+	_Io_setPropertyDomainPrefix("test")
+	Local $names[5] = ['Bill', 'Bob', 'Nancy', 'Yousef', 'Nyugi']
+	Local $locations[5] = ['NY', 'NY', 'NY', 'SE', 'DK']
+
+	; Create some persons and places
+	For $i = 0 To 4
+		Local $socket = __Io_createFakeSocket()
+		_Io_socketSetProperty($socket, 'userId', $i + 1)
+		_Io_socketSetProperty($socket, 'name', $names[$i])
+		_Io_socketSetProperty($socket, 'location', $locations[$i])
+	Next
+
+	; Find Yousef by id and validate his name and location
+
+	Local $results = _Io_getFirstByProperty('userId', 4, 'name,location')
+	_UT_Assert(_UT_Is($results[1], "equal", 'Yousef'))
+	_UT_Assert(_UT_Is($results[2], "equal", 'SE'))
+
+	; Find all userIds and names by location
+	$results = _Io_getAllByProperty('location', 'NY', 'userId,name')
+
+	Local $resultA = $results[1]
+	Local $resultB = $results[2]
+	Local $resultC = $results[3]
+
+
+	_UT_Assert(_UT_Is($resultA[1], "equal", 1))
+	_UT_Assert(_UT_Is($resultA[2], "equal", 'Bill'))
+
+	_UT_Assert(_UT_Is($resultB[1], "equal", 2))
+	_UT_Assert(_UT_Is($resultB[2], "equal", 'Bob'))
+
+	_UT_Assert(_UT_Is($resultC[1], "equal", 3))
+	_UT_Assert(_UT_Is($resultC[2], "equal", 'Nancy'))
+
+
+EndFunc
+
+Func testWhoAmI()
+
+	$g__io_whoami = $_IO_SERVER
+
+	_UT_Assert(_UT_Is(_Io_IsServer(), "equal", True))
+	_UT_Assert(_UT_Is(_Io_IsClient(), "equal", False))
+	_UT_Assert(_UT_Is(_Io_whoAmI(), "equal", $_IO_SERVER))
+	_UT_Assert(_UT_Is(_Io_whoAmI(true), "equal", "SERVER"))
+
+	; Switch it up
+
+	$g__io_whoami = $_IO_CLIENT
+
+	_UT_Assert(_UT_Is(_Io_IsServer(), "equal", False))
+	_UT_Assert(_UT_Is(_Io_IsClient(), "equal", True))
+	_UT_Assert(_UT_Is(_Io_whoAmI(), "equal", $_IO_CLIENT))
+	_UT_Assert(_UT_Is(_Io_whoAmI(true), "equal", "CLIENT"))
+
+EndFunc
+
+
+Func testAdministrationOfMiddleWares()
+
+
+	; Register some middlewares
+
+	_Io_RegisterMiddleware("connect", __MmiddlewareCallback)
+	_Io_RegisterMiddleware("connect", __MmiddlewareCallback)
+	_Io_RegisterMiddleware("disconnect", __MmiddlewareCallback)
+
+	_UT_Assert(_UT_Is($g__io_aMiddlewares[0], "equal", 3))
+
+	_Io_unRegisterMiddleware("connect", __MmiddlewareCallback); 2 should be removed
+
+	; After rebuild
+	_Io_TidyUp()
+	_UT_Assert(_UT_Is($g__io_aMiddlewares[0], "equal", 0))
+
+	; Try super cleaner
+	_Io_RegisterMiddleware("connect", __MmiddlewareCallback)
+	_Io_RegisterMiddleware("connect", __MmiddlewareCallback)
+	_Io_RegisterMiddleware("disconnect", __MmiddlewareCallback)
+
+	_Io_unRegisterEveryMiddleware()
+	_Io_TidyUp()
+	_UT_Assert(_UT_Is($g__io_aMiddlewares[0], "equal", 0))
+
+EndFunc
+
+
+Func __MmiddlewareCallback(Const $socket, ByRef $params, Const $sEventName, ByRef $sEventCallbackName)
+	#forceref $socket, $params, $sEventCallbackname, $sEventName
+	Return True
+EndFunc
+
+
+Func __MmiddlewareCallbackFalse(Const $socket, ByRef $params, Const $sEventName, ByRef $sEventCallbackName)
+	#forceref $socket, $params, $sEventCallbackname, $sEventName
+	Return False
+EndFunc
+
+
+Func TestMiddleWareEvent()
+
+	; Setup
+	Local $socket = __Io_createFakeSocket()
+	_Io_On('eventA', __On_eventA, $socket)
+	_Io_On('eventB', __On_eventB, $socket)
+	_Io_RegisterMiddleware("eventA", __MmiddlewareCallbackFalse)
+	_Io_RegisterMiddleware("eventB", __MmiddlewareCallback)
+
+
+	Local $params = [123, 456]
+
+	_UT_Assert(_UT_Is(__Io_FireEvent($socket, $params, 'eventA', $socket), "equal", False))
+	_UT_Assert(_UT_Is(__Io_FireEvent($socket, $params, 'eventB', $socket), "equal", True))
+
+EndFunc
+
+Func __On_eventA(Const $socket, $payload)
+	#forceref $socket, $payload
+EndFunc
+
+Func __On_eventB(Const $socket, $payload)
+	#forceref $socket, $payload
 EndFunc

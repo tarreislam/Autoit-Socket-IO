@@ -14,8 +14,13 @@ _UT_RegisterTest("core", testVartypeTranslation)
 _UT_RegisterTest("core", testPackageHandling)
 _UT_RegisterTest("core", testFireEvents)
 _UT_RegisterTest("core", test_banning)
-_UT_RegisterTest("core", test_postAndPrescript)
+
 _UT_RegisterTest("core", test_misc)
+_UT_RegisterTest("core", testWhoAmI)
+_UT_RegisterTest("core", test_GetAndSetCustomProperties)
+_UT_RegisterTest("core", test_SearchForProperties)
+_UT_RegisterTest("core", testAdministrationOfMiddleWares)
+_UT_RegisterTest("core", TestMiddleWareEvent)
 
 _UT_RegisterTest("public api", test_public_basic_ClientServer)
 _UT_RegisterTest("public api", test_public_basic_ClientServer_With_Encryption)
@@ -26,7 +31,6 @@ _UT_RegisterTest("public api", test_public_TidyUp)
 
 ; Start runners
 _UT_StartRunner("core", RunnerCallback)
-
 _UT_StartRunner("public api", RunnerCallback)
 
 ;Cleanup

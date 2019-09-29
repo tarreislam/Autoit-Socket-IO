@@ -36,4 +36,3 @@ Since December 2017-now I have used version 1.5.0 in an production environment f
  * Removed `_Io_setEventPostScript` and `_Io_setEventPretScript` in favor of `_Io_RegisterMiddleware`
  * Improved documentation (It still needs some love though)
  * Improved the verbosity of `_Io_DevDebug`
- * Rewrote all example scripts, they grouped by complexity "beginner", "intermediate", "advanced"

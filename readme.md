@@ -15,7 +15,7 @@ I constantly want to make this UDF faster and better, so if you have any suggest
 
 ### Limitations
 * Speed. Because I want this UDF to be as flexible and simple as possible. Sometimes speed is sacrificed, but that does not mean i don't try to .
-* ~~It is not possible to emit objects mainly because autoit does not support serialization.~~ (The UDF can now serialize [Scripting Dictionaries](https://docs.microsoft.com/en-us/office/vba/language/reference/user-interface-help/dictionary-object) thanks to [Autoit-Serialize](https://www.autoitscript.com/forum/topic/203728-autoit-serialize/)
+* ~~It is not possible to emit objects mainly because autoit does not support serialization.~~ (The UDF can now serialize [Scripting Dictionaries](https://docs.microsoft.com/en-us/office/vba/language/reference/user-interface-help/dictionary-object) thanks to [Autoit-Serialize](https://www.autoitscript.com/forum/topic/203728-autoit-serialize/))
 * Only 1D-arrays can be emitted (**2D arrays will probably never be supported**)
 
 ### Success story

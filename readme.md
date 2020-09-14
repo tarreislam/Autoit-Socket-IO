@@ -22,7 +22,7 @@ I constantly want to make this UDF faster and better, so if you have any suggest
 Since December 2017-now I have used version 1.5.0 in an production environment for 40+ clients with great success, the only downtime is planned windows updates and power outages.
 
 ### Getting started
-* Download the script from AutoIt or pull it from the official github repo `git@github.com:tarreislam/Autoit-Socket-IO.git` and checkout the tag `2.0.0`
+* Download the script from AutoIt or pull it from the official github repo `git@github.com:tarreislam/Autoit-Socket-IO.git` and checkout the tag `3.0.0`
 * The documentation is located at `Docs\index.html`
 * Take a look in the `examples/` folder
 

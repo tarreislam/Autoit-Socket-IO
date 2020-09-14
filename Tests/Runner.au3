@@ -1,4 +1,4 @@
-#include <../Packages/Autoit-Unittester/UnitTester.au3>
+#include <../Dependencies/Autoit-Unittester/UnitTester.au3>
 #include <../SocketIo.au3>
 #include <Array.au3>
 #include <Tests.au3>
@@ -10,8 +10,6 @@
 _UT_Cleanup()
 
 ; Register tests
-_UT_RegisterTest("core", testVartypeTranslation)
-_UT_RegisterTest("core", testPackageHandling)
 _UT_RegisterTest("core", testFireEvents)
 _UT_RegisterTest("core", test_banning)
 

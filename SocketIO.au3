@@ -1,5 +1,5 @@
 #cs
-	Copyright (c) 2017 TarreTarreTarre <tarre.islam@gmail.com>
+	Copyright (c) 2017-2020 TarreTarreTarre <tarre.islam@gmail.com>
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -20,9 +20,10 @@
 	SOFTWARE.
 #ce
 #include-once
+#include "Dependencies\Autoit-Serialize-1.0.0\Serialize.au3"
 #include <Crypt.au3>
 #AutoIt3Wrapper_Au3Check_Parameters=-q -d -w 1 -w 2 -w 3 -w- 4 -w 5 -w 6 -w 7
-Global Const $g__io_sVer = "2.0.0"
+Global Const $g__io_sVer = "3.0.0"
 Global Enum $_IO_SERVER, $_IO_CLIENT
 Global $g__io_DevDebug = False, _
 		$g__io_isActive = Null, _
@@ -1602,7 +1603,15 @@ Func __Io_InvokeCallback(Const $socket, ByRef $r_params, Const $fCallbackName)
 	If Not IsArray($r_params) Then
 		Dim $r_params[2] = ['CallArgArray', $socket]
 	Else
-		$r_params[1] = $socket
+		; Convert ["a", "b"] to ["CallArgArray", xxxx, "a", "b"]
+		Local $nMax = UBound($r_params) + 2
+		Local $aTmp[$nMax]
+		$aTmp[0] = 'CallArgArray'
+		$aTmp[1] = $socket
+		For $i = 2 To $nMax - 1
+			$aTmp[$i] = $r_params[$i - 2]
+		Next
+		$r_params = $aTmp
 	EndIf
 
 	If $g__io_DevDebug Then
@@ -1630,190 +1639,87 @@ Func __Io_InvokeCallback(Const $socket, ByRef $r_params, Const $fCallbackName)
 
 EndFunc   ;==>__Io_InvokeCallback
 
-Func __Io_createPackage(ByRef $sEventName, ByRef $aParams, $NumParams)
-	Local $startParamI = 3
 
-	; Build da package
-	Local $sPackage = $sEventName & ($NumParams > 2 ? @LF : "")
+Func __Io_createPackage(ByRef $sEventName, ByRef $aParams, Const $numParams)
+	Local Const $paramsProvided = $numParams - 2; -2 to ignore $socket and $sEventName
+	Local $aParamsToTransport
+	;_ArrayDisplay($aParams, $numParams)
 
-	; Determine type of params passed
-	If $aParams[0] == 'CallArgArray' Then
-		$startParamI = 4
-		$NumParams = UBound($aParams) - 2 ; -2 so we ignore  the CallArgArray
+	If $paramsProvided > 0 Then
+		Dim $aParamsToTransport[$paramsProvided]; -3 is to ignore the first two ($socket, $sEventName)
+
+		For $i = 0 To $paramsProvided - 1
+			$aParamsToTransport[$i] = $aParams[$i]
+		Next
+	Else
+		 $aParamsToTransport = Default
 	EndIf
 
-	; append parameters
-	For $i = $startParamI To $NumParams
-		$sPackage &= __Io_data2stringary($aParams[$i - 3]) & ($i < $NumParams ? @LF : "")
-	Next
 
-	; Strap
-	$sPackage &= "#"
+	; Create payload of data
+	Local Const $packageToSend = [$sEventName, $aParamsToTransport]
+
+	; Serialize and STRAP for departure. The strapping is needed to handle multiple packages in the buffer at the same time
+	Local Const $serialized = _Serialize($packageToSend) & "#"
+
 
 	If $g__io_DevDebug Then
-		ConsoleWrite("-" & @TAB & "__Io_createPackage: " & StringReplace($sPackage, @LF, '\n') & @LF)
+		ConsoleWrite("-" & @TAB & "__Io_createPackage: " & $serialized & @LF)
 	EndIf
 
 	; Return Package
-	Return $sPackage
+	Return $serialized
 EndFunc   ;==>__Io_createPackage
 
-Func __Io_getProductsFromPackage(ByRef $sPackage)
+Func __Io_getPartsFromPackage(ByRef $sPackage)
 	; Clean package
 	$sPackage = StringRegExpReplace($sPackage, "(?s)(.*)\#$", "$1")
 
 	If $g__io_DevDebug Then
-		Local $nPackageSize = StringReplace($sPackage, @LF, '\n')
-		ConsoleWrite("-" & @TAB & "__Io_getProductsFromPackage(" & StringLen($nPackageSize) & "): " & StringReplace($sPackage, @LF, '\n') & @LF)
+		Local Const $nPackageSize = StringReplace($sPackage, @LF, '\n')
+		ConsoleWrite("-" & @TAB & "__Io_getPartsFromPackage(" & StringLen($nPackageSize) & "): " & StringReplace($sPackage, @LF, '\n') & @LF)
 	EndIf
 
 	; Split the package(s) into wrapped products
-	Local $aWrapped_products = StringSplit($sPackage, "#")
+	Local Const $aWrapped_products = StringSplit($sPackage, "#")
 
 	Local Const $nWrapped_productSize = $aWrapped_products[0]
 
-	Local $aProducts[$nWrapped_productSize + 1] = [0]
-	$aProducts[0] = $nWrapped_productSize
+	Local $aParts[$nWrapped_productSize + 1] = [0]
+	$aParts[0] = $nWrapped_productSize
 
 	For $i = 1 To $nWrapped_productSize
-		Local $sWrapped_product = $aWrapped_products[$i]
-
-		; Split the products into parts
-		Local $aWrapped_parts = StringSplit($sWrapped_product, @LF)
-
-		Local $cnWrapped_size = $aWrapped_parts[0] ;
-
-		Local $sEventName = $aWrapped_parts[1]
-
-		; Translate params
-		Local $aParams[$cnWrapped_size + 1]
-		$aParams[0] = 'CallArgArray' ; This is required, otherwise, Call() will not recognize the array as containing arguments.  ;$cnWrapped_size - 1
-		$aParams[1] = '<socket>'
-
-		For $y = 2 To $cnWrapped_size
-			$aParams[$y] = __Io_stringary2data($aWrapped_parts[$y])
-		Next
-
-		; Create finished product
-		Local $aProduct = [$sEventName, $aParams]
-		$aProducts[$i] = $aProduct
+		; append unserialized package product
+		$aParts[$i] = _UnSerialize($aWrapped_products[$i])
 	Next
 
-	Return $aProducts
+	Return $aParts
 
-EndFunc   ;==>__Io_getProductsFromPackage
+EndFunc   ;==>__Io_getPartsFromPackage
 
 Func __Io_handlePackage(Const $socket, ByRef $sPackage, ByRef $parentSocket)
-	Local $products = __Io_getProductsFromPackage($sPackage) ;0 event; 1 array of params
+	Local Const $parts = __Io_getPartsFromPackage($sPackage) ;0 event; 1 array of params
 
-	For $w = 1 To $products[0]
-		Local $product = $products[$w]
+	For $i = 1 To $parts[0]
+		Local $part = $parts[$i]
 
-		Local $sEventName = $product[0]
-		Local $aParams = $product[1]
+		Local $sEventName = $part[0]
+		Local $aParams = $part[1]
 
 		__Io_FireEvent($socket, $aParams, $sEventName, $parentSocket)
 	Next
 
 EndFunc   ;==>__Io_handlePackage
 
-Func __Io_data2stringary($sData, $bArrLoop = False)
-	Local $VarGetType = VarGetType($sData)
 
-	; Prepare data (If needed
-	Switch $VarGetType
-		Case 'String'
-			$sData = StringToBinary($sData) ;
-		Case 'Bool'
-			$VarGetType = $sData ? 'Bool:true' : 'Bool:false'
-		Case 'Array'
-			Local Const $nSize = UBound($sData)
-			Local $sRet = ""
-
-			For $i = 0 To $nSize - 1
-				$sRet &= StringToBinary(__Io_data2stringary($sData[$i], True)) & ($i < $nSize - 1 ? "|" : "")
-			Next
-
-			If $bArrLoop Then
-				Return StringToBinary($sRet)
-			Else
-				$sData = BinaryToString($sRet)
-			EndIf
-	EndSwitch
-
-	Return StringFormat("%s|%s", $VarGetType, $sData)
-EndFunc   ;==>__Io_data2stringary
-
-Func __Io_stringary2data($sDataInput, $bArrLoop = False)
-
-	; Parse nested arrays
-	If StringRegExp($sDataInput, "^0x.*") And $bArrLoop Then
-
-		Local $aNestedArr = StringSplit(BinaryToString($sDataInput), "|", 2)
-		Local Const $nSize = UBound($aNestedArr) - 1
-
-		For $i = 0 To $nSize
-			$aNestedArr[$i] = __Io_stringary2data(BinaryToString($aNestedArr[$i]), True)
-		Next
-
-		Return $aNestedArr
-	EndIf
-
-	Local $aDataInput = StringRegExp($sDataInput, "([^|]+)\|(.*)", 1)
-	If @error Then Return SetError(1, 0, Null)
-
-	Local Const $sType = $aDataInput[0]
-	Local Const $uData = $aDataInput[1]
-
-	Switch $sType
-		Case "Int32"
-			Return Number($uData)
-		Case "Int64"
-			Return Number($uData)
-		Case "Ptr"
-			Return Ptr($uData)
-		Case "Binary"
-			Return Binary($uData)
-		Case "Float"
-			Return Number($uData)
-		Case "Double"
-			Return Number($uData)
-		Case "Bool:true"
-			Return True
-		Case "Bool:false"
-			Return False
-		Case "Keyword"
-			Return Null
-		Case "Array"
-			Local $aArrayChildren = StringSplit($uData, "|", 2)
-			Local Const $cnArrayChildrenSize = UBound($aArrayChildren) - 1
-
-			For $i = 0 To $cnArrayChildrenSize
-				$aArrayChildren[$i] = __Io_stringary2data(BinaryToString($aArrayChildren[$i]), True)
-			Next
-
-			Return $aArrayChildren
-		Case "String"
-			Return BinaryToString($uData)
-		Case Else
-			Return "Cannot parse type: " & $sType
-	EndSwitch
-
-EndFunc   ;==>__Io_stringary2data
-
-Func __Io_TransportPackage(Const $socket, ByRef $sPackage, Const $bRawPackets = False)
-	Local $final_package
+Func __Io_TransportPackage(Const $socket, ByRef $sPackage)
 
 	; Check if we should encrypt the data
 	If $g__io_vCryptKey Then
-		$final_package = _Crypt_EncryptData($sPackage, $g__io_vCryptKey, $g__io_vCryptAlgId)
-	ElseIf $bRawPackets == False Then
-		$final_package = StringToBinary($sPackage)
-	ElseIf $bRawPackets == True Then
-		; Do not modify if
+		Return TCPSend($socket, _Crypt_EncryptData($sPackage, $g__io_vCryptKey, $g__io_vCryptAlgId))
 	EndIf
 
-	Return TCPSend($socket, $final_package)
+	Return TCPSend($socket, $sPackage)
 EndFunc   ;==>__Io_TransportPackage
 
 Func __Io_RecvPackage(Const $socket, Const $bRawPackets = False)

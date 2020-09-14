@@ -15,7 +15,7 @@ I constantly want to make this UDF faster and better, so if you have any suggest
 
 ### Limitations
 * Speed. Because I want this UDF to be as flexible and simple as possible. Sometimes speed is sacrificed, but that does not mean i don't try to .
-* It is not possible to emit objects mainly because autoit does not support serialization.
+* ~~It is not possible to emit objects mainly because autoit does not support serialization.~~ (The UDF can now serialize [Scripting Dictionaries](https://docs.microsoft.com/en-us/office/vba/language/reference/user-interface-help/dictionary-object) thanks to [Autoit-Serialize](https://www.autoitscript.com/forum/topic/203728-autoit-serialize/)
 * Only 1D-arrays can be emitted (**2D arrays will probably never be supported**)
 
 ### Success story
@@ -27,6 +27,11 @@ Since December 2017-now I have used version 1.5.0 in an production environment f
 * Take a look in the `examples/` folder
 
 ### Changelog
+
+**Version 3.0.0** (This update break scripts. Please consult the [upgrade.md](upgrade.md) for guidance)
+ * Now supports serialization [Scripting Dictionaries](https://docs.microsoft.com/en-us/office/vba/language/reference/user-interface-help/dictionary-object)
+ * Added UnitTester UDF to the mix
+ * This is the last version of the current code base.
 
 **Version 2.0.0** (This update break scripts. Please consult the [upgrade.md](upgrade.md) for guidance)
  * All global internal variables has been renamed.

@@ -15,61 +15,6 @@
 #ce
 
 
-Func testVartypeTranslation()
-
-	; Test array validoty
-	Local $array1 = [1, 2, 'String', 22.51, ptr(25), Binary("0x00204060"), -5, 0x5, Null]
-	Local $array2 = [12930219083, "string", $array1, 3.14213892178217895943490578340578349587348957934057889345, "", StringSplit("a|b|c|", "|")]
-	Local $test_array = [ptr(213213), 125125.2525, 123213, 'string string||||)("#="#)#)=", "xDDDD!!=)"!?=)#?="!)?=)#?=)', $array2, -2590, 12893238923789238, binary(0.2)]
-
-	Local $transported_array = __Io_stringary2data(__Io_data2stringary($test_array))
-
-
-	_UT_Assert(_UT_ArrayContentIsEqual($test_array, $transported_array), "__Io_stringary2data did not transport as expected")
-
-EndFunc
-
-Func testPackageHandling()
-
-	Local Const $Transported_Package = "0x546573744576656E740A496E7433327C313233340A537472696E677C30783733373437323639364536370A496E7433327C350A496E7436347C393939393939393939393939390A4B6579776F72647C0A5074727C307830303030303044350A426F6F6C3A66616C73657C46616C73650A426F6F6C3A747275657C5472756523"
-
-	Local $sEventName = "TestEvent"
-	Local $aParams = [1234, "string", 5,  9999999999999, Null, Ptr(213), False, 1==1]
-	Local $nParams = UBound($aParams) + 2;+2 Because this function relies on @NumParams and not Ubound
-
-	Local $created_package = StringToBinary(__Io_createPackage($sEventName, $aParams, $nParams))
-
-
-	; Since our test is a string, we loose-match this one
-	_UT_Assert(_UT_Is($Transported_Package, "equal", $created_package, False), '$created_package package is wrong')
-
-
-	; Try to unpack our package
-	Local $recvd_package = BinaryToString($created_package)
-	Local $aProducts = __Io_getProductsFromPackage($recvd_package)
-
-	_UT_Assert(IsArray($aProducts), '__Io_getProductsFromPackage did not return an array')
-
-	if IsArray($aProducts) Then
-		Local $aProduct = $aProducts[1]
-		Local $sEventName2 = $aProduct[0]
-		Local $aParams2 = $aProduct[1]
-
-		_UT_Assert(_UT_Is($sEventName, "equal", $sEventName2))
-
-		_UT_Assert(_UT_Is($aParams[0], "equal", $aParams2[2]))
-		_UT_Assert(_UT_Is($aParams[1], "equal", $aParams2[3]))
-		_UT_Assert(_UT_Is($aParams[2], "equal", $aParams2[4]))
-		_UT_Assert(_UT_Is($aParams[3], "equal", $aParams2[5]))
-		_UT_Assert(_UT_Is($aParams[4], "equal", $aParams2[6]))
-		_UT_Assert(_UT_Is($aParams[5], "equal", $aParams2[7]))
-		_UT_Assert(_UT_Is($aParams[6], "equal", $aParams2[8]))
-		_UT_Assert(_UT_Is($aParams[7], "equal", $aParams2[9]))
-
-	EndIf
-
-EndFunc
-
 Func testFireEvents()
 	Global $g__io_events[1000] = [0]
 	; Register event

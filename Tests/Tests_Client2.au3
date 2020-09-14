@@ -1,7 +1,7 @@
 #AutoIt3Wrapper_Change2CUI=Y
 #NoTrayIcon
 #include "..\socketIO.au3"
-#include <../Packages/Autoit-Unittester/UnitTester.au3>
+#include <../Dependencies/Autoit-Unittester/UnitTester.au3>
 
 _UT_SetNamespace("public api")
 

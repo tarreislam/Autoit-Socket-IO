@@ -1,6 +1,8 @@
-# Upgrade guide from 1.5.x to 2.0.0
+# Upgrade guide from 2.0.0 to 3.0.0
 
-> Here I will try to document every possible script breaking change so you can update your script accordingly.
+The only change is internal and wont affect the public API. The change is implementation of [Autoit-Serialize](https://www.autoitscript.com/forum/topic/203728-autoit-serialize/) which breaks the support to 2.x
+
+# Upgrade guide from 1.5.x to 2.0.0
 
 #### Substitute for **_Io_setEventPostScript** and **_Io_setEventPretScript**
 

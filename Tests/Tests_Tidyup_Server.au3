@@ -1,6 +1,6 @@
 #AutoIt3Wrapper_Change2CUI=Y
 #include "..\socketIO.au3"
-#include <../Packages/Autoit-Unittester/UnitTester.au3>
+#include <../Dependencies/Autoit-Unittester/UnitTester.au3>
 OnAutoItExitRegister("__exit")
 
 

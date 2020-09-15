@@ -1,0 +1,5 @@
+test.au3
+*.exe
+BackUp/
+Packages/
+todo.txt

@@ -1,1 +1,0 @@
-Use index.html to browse the docs

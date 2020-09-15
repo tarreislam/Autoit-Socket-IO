@@ -1,1 +1,0 @@
-These examples are untouched since 1.5.x and does not follow any particular "best praxis", so dont get inspired.

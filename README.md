@@ -1,3 +1,6 @@
+
+Version 2.x.x and 3.x.x has been moved to [branch 3.x](https://github.com/tarreislam/Autoit-Socket-IO/tree/3.x)
+
 ## About Autoit-Socket-IO
 Autoit-Socket-IO is a event driven TCP/IP wrapper heavily inspired from [Socket.IO](https://socket.io/) with focus on user friendliness and long term sustainability.
 

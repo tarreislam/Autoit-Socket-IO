@@ -943,7 +943,7 @@ None
 **Syntax**
 
 ```autoit
-_Io_CommonEvents_FireEventAttempt(Const Byref $oEvent, Const Byref $eventName, Const Byref $eventData, Const Byref $socket,
+_Io_CommonEvents_FireEventAttempt(Const Byref $oEvent, Const Byref $eventName, Const Byref $eventData, Const Byref $socket, Const Byref $mySocket)
 ```
 
 **Description**
@@ -967,7 +967,7 @@ None
 **Syntax**
 
 ```autoit
-_Io_CommonEvents_EventFired(Const Byref $oEvent, Const $eventCallable, Const $eventData)
+_Io_CommonEvents_EventFired(Const Byref $oEvent, Const Byref $eventName, Const Byref $eventData, Const Byref $socket,  Const Byref $mySocket)
 ```
 
 **Description**
@@ -991,12 +991,12 @@ None
 **Syntax**
 
 ```autoit
-_Io_CommonEvents_EventNotFired(Const Byref $oEvent, Const $eventCallable, Const $eventData)
+_Io_CommonEvents_EventNotFired(Const Byref $oEvent, Const Byref $eventName, Const Byref $eventData, Const Byref $socket, Const Byref $mySocket, Const $reason)
 ```
 
 **Description**
 
-This event is fired if something caused the event not to be fired
+This event is fired if something caused the IO event not to be fired
 
 **Returns**
 

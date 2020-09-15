@@ -75,8 +75,7 @@ EndFunc   ;==>_Io_CommonEvents_Flooded
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_CommonEvents_FireEventAttempt
 ; Description ...: This event is fired when an attempt of _Io_FireIoEvent is made
-; Syntax ........: _Io_CommonEvents_FireEventAttempt(Const Byref $oEvent, Const Byref $eventName, Const Byref $eventData, Const Byref $socket,
-;                  Const Byref $mySocket)
+; Syntax ........: _Io_CommonEvents_FireEventAttempt(Const Byref $oEvent, Const Byref $eventName, Const Byref $eventData, Const Byref $socket, Const Byref $mySocket)
 ; Parameters ....: $oEvent              - [in/out and const] an object.
 ;                  $eventName           - [in/out and const] an unknown value.
 ;                  $eventData           - [in/out and const] an unknown value.
@@ -100,7 +99,7 @@ EndFunc
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_CommonEvents_EventFired
 ; Description ...: This event is fired if the the function callback of _Io_On callable was ran successfully
-; Syntax ........: _Io_CommonEvents_EventFired(Const Byref $oEvent, Const $eventCallable, Const $eventData)
+; Syntax ........: _Io_CommonEvents_EventFired(Const Byref $oEvent, Const Byref $eventName, Const Byref $eventData, Const Byref $socket,  Const Byref $mySocket)
 ; Parameters ....: $oEvent              - [in/out and const] an object.
 ;                  $eventCallable       - [const] an unknown value.
 ;                  $eventData           - [const] an unknown value.
@@ -119,13 +118,17 @@ Func _Io_CommonEvents_EventFired(Const ByRef $oEvent, Const ByRef $eventName, Co
 	$oEvent.add("mySocket", $mySocket)
 EndFunc
 
+
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_CommonEvents_EventNotFired
-; Description ...: This event is fired if something caused the event not to be fired
-; Syntax ........: _Io_CommonEvents_EventNotFired(Const Byref $oEvent, Const $eventCallable, Const $eventData)
+; Description ...: This event is fired if something caused the IO event not to be fired
+; Syntax ........: _Io_CommonEvents_EventNotFired(Const Byref $oEvent, Const Byref $eventName, Const Byref $eventData, Const Byref $socket, Const Byref $mySocket, Const $reason)
 ; Parameters ....: $oEvent              - [in/out and const] an object.
-;                  $eventCallable       - [const] an unknown value.
-;                  $eventData           - [const] an unknown value.
+;                  $eventName           - [in/out and const] an unknown value.
+;                  $eventData           - [in/out and const] an unknown value.
+;                  $socket              - [in/out and const] a string value.
+;                  $mySocket            - [in/out and const] a map.
+;                  $reason              - [const] an unknown value.
 ; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:

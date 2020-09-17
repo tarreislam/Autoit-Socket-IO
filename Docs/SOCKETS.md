@@ -4,7 +4,7 @@
 
 ## Introduction
 
-Connected sockets are now stored in something that is called a [Scripting Dictionary](https://docs.microsoft.com/en-us/office/vba/language/reference/user-interface-help/dictionary-object) that allows us to have key-item pairs instead of 0-based arrays. This is pretty neat because for loops becomes a things in the past when searching
+Connected sockets are now stored in something that is called a [Scripting Dictionary](https://docs.microsoft.com/en-us/office/vba/language/reference/user-interface-help/dictionary-object) that allows us to have key-item pairs instead of 0-based arrays.
 
 
 
@@ -18,8 +18,8 @@ $sockets = _Io_getSockets()
 $numSockets = sockets.count(); Will return how many sockets are connected
 
 ; Looping thru all sockets
-for $socket in _Io_getSockets()
-	local $socketProp = sockets.item($socket)
+for $socket in $sockets
+	local $socketProp = $sockets.item($socket)
 	local $ipAddress = $socketProp.item("ip"); The IP address of the connected socket
 	local $connectedAt = $socketProp.item("connected_at"); YYYY-MM-DD HH:MM:SS 
 	

@@ -221,7 +221,9 @@ Func _Io_CommonEvents_Disconnected_UnRegisterEvents(Const $oEvent)
 	#forceref $oEvent
 	#forcedef $g__io_Events
 
-	$g__io_Events.remove($oEvent.item("socket"))
+	; Remove events if they exist on the given socket
+	_Io_ClearEvents()
+
 EndFunc   ;==>_Io_CommonEvents_Disconnected_UnRegisterEvents
 
 ; #INTERNAL_USE_ONLY# ===========================================================================================================

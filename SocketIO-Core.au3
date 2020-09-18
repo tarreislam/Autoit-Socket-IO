@@ -305,19 +305,25 @@ EndFunc
 
 ; #FUNCTION# ====================================================================================================================
 ; Name ..........: _Io_ClearEvents
-; Description ...: Removes all bound events for a given socket
+; Description ...: Removes all bound events for a given socket.
 ; Syntax ........: _Io_ClearEvents([$socket = $g__io_mySocket])
 ; Parameters ....: $socket              - [optional] a string value. Default is $g__io_mySocket.
 ; Return values .: None
 ; Author ........: TarreTarreTarre
 ; Modified ......:
-; Remarks .......:
+; Remarks .......: @error is set if the given socket is not registred
 ; Related .......:
 ; Link ..........:
 ; Example .......: No
 ; ===============================================================================================================================
 Func _Io_ClearEvents($socket = $g__io_mySocket)
-	$g__io_Events.item($socket).removeAll()
+
+	If $g__io_Events.exists($socket) Then
+		$g__io_Events.item($socket).removeAll()
+	Else
+		Return SetError(1)
+	EndIf
+
 EndFunc
 
 ; #FUNCTION# ====================================================================================================================
